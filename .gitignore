@@ -1,0 +1,23 @@
+# Node/Next.js
+**/node_modules/
+**/.next/
+**/.turbo/
+**/.vercel/
+**/.env*
+**/test-results/
+**/playwright-report/
+**/.playwright/
+
+# Python/FastAPI
+**/venv/
+**/__pycache__/
+*.pyc
+**/.pytest_cache/
+**/.coverage
+backend/assignwell.db
+
+# OS/Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

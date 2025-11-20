@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
 import api from "@/lib/api"
+import { useRouter } from "next/navigation"
+import { useAuthStore } from "@/store/auth"
 
 export function AddTaskDialog({ onTaskAdded, children }: { onTaskAdded?: () => void, children?: React.ReactNode }) {
     const [open, setOpen] = useState(false)
@@ -33,8 +35,19 @@ export function AddTaskDialog({ onTaskAdded, children }: { onTaskAdded?: () => v
         estimated_minutes: 30,
     })
     const { toast } = useToast()
+    const router = useRouter()
+    const token = useAuthStore(state => state.token)
 
     const handleCreateTask = async () => {
+        if (!token) {
+            toast({
+                title: "Login Required",
+                description: "Please sign in to add tasks",
+                variant: "destructive"
+            })
+            router.push("/login")
+            return
+        }
         if (!newTask.title || !newTask.due_date) {
             toast({
                 title: "Missing Information",

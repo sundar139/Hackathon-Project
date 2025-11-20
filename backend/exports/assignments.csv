@@ -1,2 +1,0 @@
-id,user_id,course_id,title,description,due_at,estimated_minutes,difficulty,status,source_type,user_confidence,importance_level,ai_context_summary,is_group,ai_generated_plan,created_at,updated_at
-1,1,,assignment,,2025-11-20 23:01:00+00:00,30,DifficultyLevel.MEDIUM,AssignmentStatus.NOT_STARTED,SourceType.MANUAL,3,ImportanceLevel.MEDIUM,,False,False,2025-11-20 16:20:02.400787+00:00,

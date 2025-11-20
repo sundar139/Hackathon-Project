@@ -1,6 +1,7 @@
 
 from pydantic_settings import BaseSettings
 from typing import List, Union
+from pathlib import Path
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "AssignWell"
@@ -30,16 +31,19 @@ class Settings(BaseSettings):
 
     class Config:
         case_sensitive = True
-        env_file = ".env"
+        env_file = str(Path(__file__).resolve().parents[2] / ".env")
 
     def __init__(self, **data):
         super().__init__(**data)
         if self.DATABASE_URL:
             self.SQLALCHEMY_DATABASE_URI = self.DATABASE_URL
         elif not self.SQLALCHEMY_DATABASE_URI:
-            # Use SQLite for development (easier setup)
-            self.SQLALCHEMY_DATABASE_URI = "sqlite:///./assignwell.db"
-            # For PostgreSQL, use:
-            # self.SQLALCHEMY_DATABASE_URI = f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+            if all([self.POSTGRES_SERVER, self.POSTGRES_USER, self.POSTGRES_DB, self.POSTGRES_PORT]):
+                self.SQLALCHEMY_DATABASE_URI = (
+                    f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+                    f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+                )
+            else:
+                self.SQLALCHEMY_DATABASE_URI = "sqlite:///./assignwell.db"
 
 settings = Settings()

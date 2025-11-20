@@ -1,0 +1,2 @@
+id,email,hashed_password,full_name,timezone,institution,is_active,created_at,updated_at
+1,test@user.com,$pbkdf2-sha256$29000$FAIAoDQmBABAaE3p/T.nlA$Qrzak5/.mac4GI3nmLMTnuxP2A/Ni5lkFs1nkBHp/.8,Test User,UTC,,True,2025-11-20 16:19:37.167082+00:00,

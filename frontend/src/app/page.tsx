@@ -78,13 +78,18 @@ export default function DashboardPage() {
     const handleAssignmentUpdated = () => {
       fetchAssignments()
     }
+    const handleAssignmentAdded = () => {
+      fetchAssignments()
+    }
     window.addEventListener('breakCompleted', handleBreakComplete)
     window.addEventListener('breakStarted', handleBreakStarted)
     window.addEventListener('assignmentUpdated', handleAssignmentUpdated)
+    window.addEventListener('assignmentAdded', handleAssignmentAdded)
     return () => {
       window.removeEventListener('breakCompleted', handleBreakComplete)
       window.removeEventListener('breakStarted', handleBreakStarted)
       window.removeEventListener('assignmentUpdated', handleAssignmentUpdated)
+      window.removeEventListener('assignmentAdded', handleAssignmentAdded)
       clearTimeout(id)
     }
   }, [token, router])
@@ -124,7 +129,7 @@ export default function DashboardPage() {
 
         {/* Row 1, Col 3: Insights */}
         <div className="overflow-hidden">
-          <InsightsCard />
+          <InsightsCard tasks={assignments} />
         </div>
 
         {/* Row 2, Col 1: Upcoming Tasks */}

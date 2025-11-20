@@ -2,7 +2,9 @@ from .user import User, UserCreate, UserUpdate
 from .token import Token, TokenPayload
 from .assignment import Assignment, AssignmentCreate, AssignmentUpdate, Course, CourseCreate, CourseUpdate, Subtask, SubtaskCreate, SubtaskUpdate
 from .schedule import ScheduleBlock, ScheduleBlockCreate, ScheduleBlockUpdate
-from .mood import MoodCheckin, MoodCheckinCreate, MoodCheckinUpdate, MoodInsight
+from .mood import MoodCheckin, MoodCheckinCreate, MoodCheckinUpdate, MoodInsight, MoodSuggestion
+from .schedule import ScheduleBlock, ScheduleBlockCreate, ScheduleBlockUpdate
+from .suggestion import WellbeingSuggestion, WellbeingSuggestionCreate
 from .peer_group import PeerGroup, PeerGroupCreate, PeerGroupUpdate, GroupMember, GroupMessage, GroupMessageCreate
 from .intervention import Intervention, InterventionCreate, InterventionSession, InterventionSessionCreate, InterventionSessionUpdate
 from .chat import ChatSession, ChatSessionCreate, ChatMessage

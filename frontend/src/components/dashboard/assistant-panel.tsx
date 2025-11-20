@@ -52,7 +52,7 @@ export function AssistantPanel({ compact = false }: AssistantPanelProps) {
         setIsLoading(true)
 
         try {
-            const response = await api.post("/chat/ask", { content: userMessage.content })
+            const response = await api.post("/chat/ask", { role: "user", content: userMessage.content })
             const aiResponse: Message = {
                 role: "assistant",
                 content: response.data.content,
@@ -73,9 +73,10 @@ export function AssistantPanel({ compact = false }: AssistantPanelProps) {
     }
 
     const suggestedPrompts = [
-        "I'm feeling overwhelmed",
         "Help me plan my day",
-        "I need motivation"
+        "Break down my assignment",
+        "I'm feeling overwhelmed",
+        "Suggest a break"
     ]
 
     return (
@@ -168,10 +169,9 @@ export function AssistantPanel({ compact = false }: AssistantPanelProps) {
                     </div>
                 </ScrollArea>
 
-                {/* Suggested Prompts - Only show in non-compact mode */}
-                {!compact && messages.length === 1 && (
+                {/* Inline suggestions near input */}
+                {!compact && (
                     <div className="px-4 pb-2">
-                        <p className="text-xs text-muted-foreground mb-2">Suggested:</p>
                         <div className="flex flex-wrap gap-2">
                             {suggestedPrompts.map((prompt, index) => (
                                 <Button
@@ -195,7 +195,7 @@ export function AssistantPanel({ compact = false }: AssistantPanelProps) {
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyPress={(e) => e.key === "Enter" && handleSend()}
-                            placeholder="Type your message..."
+                            placeholder="Type your message... Try: Help me plan my day"
                             disabled={isLoading}
                             className={cn("flex-1", compact && "h-8 text-xs")}
                         />

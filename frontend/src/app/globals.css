@@ -79,6 +79,8 @@
 @utility text-secondary-foreground { color: hsl(var(--secondary-foreground)); }
 @utility bg-accent { background-color: hsl(var(--accent-hsl)); }
 @utility text-accent-foreground { color: hsl(var(--accent-foreground)); }
+@utility bg-popover { background-color: hsl(var(--popover)); }
+@utility text-popover-foreground { color: hsl(var(--popover-foreground)); }
 @utility text-muted-foreground { color: hsl(var(--muted-foreground)); }
 @utility ring-ring { --tw-ring-color: hsl(var(--ring)); }
 @utility ring-offset-background { --tw-ring-offset-color: hsl(var(--background)); }

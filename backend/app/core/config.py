@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # AI / LLM Configuration
     OPENAI_API_KEY: Union[str, None] = None  # Set this in .env to enable real AI features
     OPENAI_MODEL: str = "gpt-4o-mini"  # Can be changed to gpt-4, gpt-3.5-turbo, etc.
+    OPENAI_FAST_MODEL: str = "gpt-3.5-turbo"  # Faster, lower-cost model for chat
 
     class Config:
         case_sensitive = True

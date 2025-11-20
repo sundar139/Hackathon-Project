@@ -76,13 +76,17 @@ export function QuickBreaks() {
       }
     } else {
       try {
-        await api.post("/assignments/", {
+        const res = await api.post("/assignments/", {
           title: `${breakItem.name} Break`,
           due_at: localISO,
           importance_level: "low",
           status: "COMPLETED",
           estimated_minutes: 0
         })
+        const newId = (res?.data as { id?: number })?.id
+        if (newId) {
+          window.dispatchEvent(new CustomEvent('assignmentUpdated', { detail: { id: newId, status: 'COMPLETED' } }))
+        }
       } catch (error) {
         console.error("Failed to add instant break to calendar", error)
       }
@@ -104,6 +108,7 @@ export function QuickBreaks() {
     if (activeBreakId) {
       try {
         await api.put(`/assignments/${activeBreakId}`, { status: "COMPLETED" })
+        window.dispatchEvent(new CustomEvent('assignmentUpdated', { detail: { id: activeBreakId, status: 'COMPLETED' } }))
       } catch (error) {
         console.error("Failed to mark break as completed", error)
       } finally {
@@ -258,7 +263,16 @@ export function QuickBreaks() {
                         <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
                             <div
                                 className="bg-blue-500 h-2 rounded-full transition-all duration-1000"
-                                style={{ width: `${(timeRemaining / ((Math.max(parseInt(customMinutes) || 0, 1)) * 60)) * 100}%` }}
+                                style={{
+                                    width: (() => {
+                                        const parsed = parseInt(customMinutes, 10)
+                                        const baseMin = Number.isFinite(parsed) ? parsed : (selectedBreak?.defaultMinutes || 1)
+                                        const denom = Math.max(baseMin, 1) * 60
+                                        const pct = denom > 0 ? (timeRemaining / denom) * 100 : 0
+                                        const clamped = Math.max(0, Math.min(100, pct))
+                                        return `${clamped}%`
+                                    })()
+                                }}
                             />
                         </div>
                     </div>

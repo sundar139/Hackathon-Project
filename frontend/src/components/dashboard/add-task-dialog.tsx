@@ -197,8 +197,11 @@ export function AddTaskDialog({ onTaskAdded, children }: { onTaskAdded?: () => v
                         <Input
                             id="est"
                             type="number"
-                            value={newTask.estimated_minutes}
-                            onChange={(e) => setNewTask({ ...newTask, estimated_minutes: parseInt(e.target.value) })}
+                            value={Number.isFinite(newTask.estimated_minutes) ? newTask.estimated_minutes : 0}
+                            onChange={(e) => {
+                                const parsed = parseInt(e.target.value, 10)
+                                setNewTask({ ...newTask, estimated_minutes: Number.isFinite(parsed) ? parsed : 0 })
+                            }}
                             className="col-span-3"
                         />
                     </div>

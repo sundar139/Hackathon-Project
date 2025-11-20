@@ -34,6 +34,7 @@ export default function LoginPage() {
 
             const { access_token } = response.data
             setToken(access_token)
+            try { window.localStorage.setItem("loginAt", String(Date.now())) } catch {}
 
             // Fetch user details
             const userResponse = await api.get("/users/me", {

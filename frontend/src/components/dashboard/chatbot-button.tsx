@@ -30,7 +30,7 @@ export function ChatbotButton() {
         setIsLoading(true)
 
         try {
-            const response = await api.post("/chat/ask", { content: input })
+            const response = await api.post("/chat/ask", { role: "user", content: input })
             const aiMessage: Message = { role: "assistant", content: response.data.content }
             setMessages(prev => [...prev, aiMessage])
         } catch (error) {

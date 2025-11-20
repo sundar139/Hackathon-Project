@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Circle, CheckCircle2 } from "lucide-react"
 import api from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -23,8 +23,21 @@ export function UpcomingTasks({ tasks, selectedDate }: UpcomingTasksProps) {
   const tomorrow = new Date(today)
   tomorrow.setDate(tomorrow.getDate() + 1)
   const [completedIds, setCompletedIds] = useState<number[]>([])
+  const [excludedBreakTitles, setExcludedBreakTitles] = useState<string[]>(["Quick Break"]) 
   const threeDaysOut = new Date(today)
   threeDaysOut.setDate(threeDaysOut.getDate() + 3)
+
+  useEffect(() => {
+    try {
+      const raw = typeof window !== 'undefined' ? window.localStorage.getItem('assignwell.excludedBreakTitles') : null
+      if (raw) {
+        const parsed = (() => {
+          try { return JSON.parse(raw) as string[] } catch { return [] }
+        })()
+        if (Array.isArray(parsed) && parsed.length) setExcludedBreakTitles(parsed)
+      }
+    } catch {}
+  }, [])
 
   const priorityRank = (level: string) => {
     switch (level?.toLowerCase()) {
@@ -39,10 +52,11 @@ export function UpcomingTasks({ tasks, selectedDate }: UpcomingTasksProps) {
   const upcomingTasks = tasks
     .filter(task => {
       const dueDate = new Date(task.due_at)
-      const notBreak = !task.title?.toLowerCase().includes('break')
+      const titleNorm = (task.title || '').trim().toLowerCase()
+      const isExcluded = excludedBreakTitles.some(t => titleNorm === t.trim().toLowerCase())
       const notCompleted = task.status?.toLowerCase() !== 'completed'
       const notLocallyCompleted = !completedIds.includes(task.id)
-      return dueDate >= today && dueDate <= threeDaysOut && notBreak && notCompleted && notLocallyCompleted
+      return dueDate >= today && dueDate <= threeDaysOut && !isExcluded && notCompleted && notLocallyCompleted
     })
     .sort((a, b) => {
       const prDiff = priorityRank(b.importance_level) - priorityRank(a.importance_level)
@@ -75,6 +89,7 @@ export function UpcomingTasks({ tasks, selectedDate }: UpcomingTasksProps) {
       <div className="space-y-2 flex-1 overflow-y-auto">
         {upcomingTasks.map((task) => {
           const isCompleted = task.status?.toLowerCase() === 'completed'
+          const isBreak = (task.title || '').toLowerCase().includes('break')
 
           const handleComplete = async () => {
             try {
@@ -118,6 +133,12 @@ export function UpcomingTasks({ tasks, selectedDate }: UpcomingTasksProps) {
                   {task.title}
                 </h3>
                 <div className="flex items-center gap-2 mt-1">
+                  <span className={cn(
+                    "text-xs px-2 py-0.5 rounded-full border",
+                    isBreak ? "bg-gray-100 text-gray-700 border-gray-200" : "bg-indigo-100 text-indigo-700 border-indigo-200"
+                  )}>
+                    {isBreak ? "Break" : "Task"}
+                  </span>
                   <span className={cn(
                     "text-xs px-2 py-0.5 rounded-full border",
                     getPriorityColor(task.importance_level)

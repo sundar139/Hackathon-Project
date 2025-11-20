@@ -2,6 +2,7 @@
 from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel
+from typing import Optional, Dict, Any
 from app.models.chat import RiskFlag
 
 class ChatSessionBase(BaseModel):
@@ -26,5 +27,6 @@ class ChatSession(ChatSessionBase):
         from_attributes = True
 
 class ChatMessage(BaseModel):
-    role: str # user, assistant
+    role: Optional[str] = "user"  # user, assistant
     content: str
+    context: Optional[Dict[str, Any]] = None

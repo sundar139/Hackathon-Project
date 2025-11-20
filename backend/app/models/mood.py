@@ -28,6 +28,7 @@ class MoodCheckin(Base):
     stress_level = Column(Integer, default=0) # 0-10
     anxiety_level = Column(Integer, default=0) # 0-10
     sleep_hours_last_night = Column(Float, nullable=True)
+    additional_metrics = Column(JSON, default=dict)
     
     tags = Column(JSON, default=list)
     note = Column(Text, nullable=True)

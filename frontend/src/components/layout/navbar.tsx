@@ -91,7 +91,7 @@ export function Navbar() {
                                 </div>
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuContent align="end" className="w-48 z-[60]">
                             <DropdownMenuItem onClick={() => router.push("/peer-support")}>Peer Support</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => router.push("/settings")}>
                                 Profile Settings

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from "recharts"
 import { BrainCircuit, TrendingUp, AlertCircle, ArrowRight } from "lucide-react"
 import api from "@/lib/api"
+import { useAuthStore } from "@/store/auth"
 
 const productivityData = [
     { time: "8am", value: 30 },
@@ -18,20 +19,21 @@ const productivityData = [
 
 export function InsightsCharts() {
     const [moodInsight, setMoodInsight] = useState("Analyze your mood patterns to see insights here.")
+    const token = useAuthStore(state => state.token)
 
     useEffect(() => {
         const fetchInsight = async () => {
+            if (!token) return
             try {
                 const res = await api.post("/ai/analyze-mood")
                 if (res.data && res.data.insight) {
                     setMoodInsight(res.data.insight)
                 }
-            } catch (error) {
-                console.error("Failed to fetch mood insight", error)
+            } catch {
             }
         }
         fetchInsight()
-    }, [])
+    }, [token])
 
     return (
         <div className="grid grid-rows-[1.5fr_1fr] gap-4 h-full min-h-0">

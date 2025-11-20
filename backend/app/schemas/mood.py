@@ -1,5 +1,5 @@
 
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel
 from app.models.mood import MoodValence, RiskAssessment
@@ -13,6 +13,7 @@ class MoodCheckinBase(BaseModel):
     sleep_hours_last_night: Optional[float] = None
     tags: Optional[List[str]] = []
     note: Optional[str] = None
+    additional_metrics: Optional[Dict[str, Any]] = {}
 
 # Properties to receive via API on creation
 class MoodCheckinCreate(MoodCheckinBase):
@@ -38,3 +39,8 @@ class MoodCheckin(MoodCheckinInDBBase):
 
 class MoodInsight(BaseModel):
     insight: str
+
+class MoodSuggestion(BaseModel):
+    title: str
+    description: str
+    category: str

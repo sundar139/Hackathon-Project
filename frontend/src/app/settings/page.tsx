@@ -19,6 +19,7 @@ export default function SettingsPage() {
         notifications_enabled: true
     })
     const [isLoading, setIsLoading] = useState(false)
+    const [breakTitlesText, setBreakTitlesText] = useState("")
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -36,6 +37,15 @@ export default function SettingsPage() {
             }
         }
         fetchSettings()
+        try {
+            const raw = typeof window !== 'undefined' ? window.localStorage.getItem('assignwell.excludedBreakTitles') : null
+            if (raw) {
+                const parsed = (() => { try { return JSON.parse(raw) as string[] } catch { return [] } })()
+                if (Array.isArray(parsed) && parsed.length) setBreakTitlesText(parsed.join(", "))
+            } else {
+                setBreakTitlesText("Quick Break")
+            }
+        } catch {}
     }, [])
 
     const handleSave = async () => {
@@ -52,6 +62,16 @@ export default function SettingsPage() {
             console.error("Failed to save settings", error)
             setIsLoading(false)
         }
+    }
+
+    const handleSaveBreakFilters = () => {
+        const items = breakTitlesText
+            .split(',')
+            .map(s => s.trim())
+            .filter(s => s.length > 0)
+        try {
+            window.localStorage.setItem('assignwell.excludedBreakTitles', JSON.stringify(items))
+        } catch {}
     }
 
     return (
@@ -71,8 +91,11 @@ export default function SettingsPage() {
                             <Label>Max Daily Study Hours</Label>
                             <Input
                                 type="number"
-                                value={settings.max_daily_study_hours}
-                                onChange={(e) => setSettings({ ...settings, max_daily_study_hours: parseInt(e.target.value) })}
+                                value={Number.isFinite(settings.max_daily_study_hours) ? settings.max_daily_study_hours : 0}
+                                onChange={(e) => {
+                                    const parsed = parseInt(e.target.value, 10)
+                                    setSettings({ ...settings, max_daily_study_hours: Number.isFinite(parsed) ? parsed : 0 })
+                                }}
                             />
                         </div>
                         <div className="space-y-2">
@@ -122,6 +145,24 @@ export default function SettingsPage() {
                                 </SelectContent>
                             </Select>
                         </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="col-span-2">
+                    <CardHeader>
+                        <CardTitle>Break Filters</CardTitle>
+                        <CardDescription>Set break titles to exclude from Upcoming Tasks.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Excluded Break Titles (comma-separated)</Label>
+                            <Input
+                                value={breakTitlesText}
+                                onChange={(e) => setBreakTitlesText(e.target.value)}
+                                placeholder="Quick Break, Nap, Lunch Break"
+                            />
+                        </div>
+                        <Button variant="outline" onClick={handleSaveBreakFilters}>Save Break Filters</Button>
                     </CardContent>
                 </Card>
 

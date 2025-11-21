@@ -21,10 +21,21 @@ interface Assignment {
   estimated_minutes?: number
 }
 
+interface ScheduleBlock {
+  id: number
+  title: string
+  start_at: string
+  end_at: string
+  type: string
+  status: string
+  source: string
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const token = useAuthStore(state => state.token)
   const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [scheduleBlocks, setScheduleBlocks] = useState<ScheduleBlock[]>([])
   const [selectedDate, setSelectedDate] = useState<Date>(new Date()) // Today by default
   const [userName, setUserName] = useState("Student")
   const [greeting, setGreeting] = useState("Good Morning")
@@ -40,8 +51,25 @@ export default function DashboardPage() {
     try {
       const response = await api.get("/assignments/")
       setAssignments(response.data)
-    } catch (error) {
+    } catch (error: any) {
+      // 401 errors are handled by the API interceptor (logout + redirect)
+      if (error.response?.status === 401) {
+        return
+      }
       console.error("Failed to fetch assignments", error)
+    }
+  }
+
+  const fetchScheduleBlocks = async () => {
+    try {
+      const response = await api.get("/schedule/", { params: { limit: 1000 } })
+      setScheduleBlocks(response.data || [])
+    } catch (error: any) {
+      // 401 errors are handled by the API interceptor (logout + redirect)
+      if (error.response?.status === 401) {
+        return
+      }
+      console.error("Failed to fetch schedule blocks", error)
     }
   }
 
@@ -52,44 +80,60 @@ export default function DashboardPage() {
         const firstName = response.data.full_name.split(' ')[0]
         setUserName(firstName)
       }
-    } catch {
+    } catch (error: any) {
+      // 401 errors are handled by the API interceptor (logout + redirect)
+      if (error.response?.status === 401) {
+        return
+      }
       console.log("Using default name")
     }
   }
 
   useEffect(() => {
-    if (!token) {
+    // Check token on mount and when it changes
+    const currentToken = useAuthStore.getState().token
+    if (!currentToken) {
       router.replace("/login")
       return
     }
 
     const id = setTimeout(() => {
       fetchAssignments()
+      fetchScheduleBlocks()
       fetchUserName()
       updateGreeting()
     }, 0)
 
     const handleBreakComplete = () => {
       fetchAssignments()
+      fetchScheduleBlocks()
     }
     const handleBreakStarted = () => {
       fetchAssignments()
+      fetchScheduleBlocks()
     }
     const handleAssignmentUpdated = () => {
       fetchAssignments()
+      fetchScheduleBlocks()
     }
     const handleAssignmentAdded = () => {
       fetchAssignments()
+      fetchScheduleBlocks()
+    }
+    const handleScheduleUpdated = () => {
+      fetchScheduleBlocks()
     }
     window.addEventListener('breakCompleted', handleBreakComplete)
     window.addEventListener('breakStarted', handleBreakStarted)
     window.addEventListener('assignmentUpdated', handleAssignmentUpdated)
     window.addEventListener('assignmentAdded', handleAssignmentAdded)
+    window.addEventListener('scheduleUpdated', handleScheduleUpdated)
     return () => {
       window.removeEventListener('breakCompleted', handleBreakComplete)
       window.removeEventListener('breakStarted', handleBreakStarted)
       window.removeEventListener('assignmentUpdated', handleAssignmentUpdated)
       window.removeEventListener('assignmentAdded', handleAssignmentAdded)
+      window.removeEventListener('scheduleUpdated', handleScheduleUpdated)
       clearTimeout(id)
     }
   }, [token, router])
@@ -124,6 +168,7 @@ export default function DashboardPage() {
           <ScheduleView
             date={selectedDate}
             tasks={assignments}
+            scheduleBlocks={scheduleBlocks}
           />
         </div>
 

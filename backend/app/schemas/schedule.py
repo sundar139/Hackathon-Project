@@ -28,4 +28,4 @@ class ScheduleBlock(ScheduleBlockBase):
     source: BlockSource
 
     class Config:
-        orm_mode = True
+        from_attributes = True

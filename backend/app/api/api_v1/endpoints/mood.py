@@ -91,6 +91,8 @@ async def infer_metrics(
     mood_in: schemas.MoodCheckinCreate,
     current_user: models.User = Depends(deps.get_current_user),
 ) -> Any:
+    from app.services.ai_service import ai_service
+    
     payload = mood_in.dict()
     result = await ai_service.infer_mood_metrics(payload)
     return result
@@ -101,6 +103,8 @@ async def wellbeing_suggestions(
     db: Session = Depends(deps.get_db),
     current_user: models.User = Depends(deps.get_current_user),
 ) -> Any:
+    from app.services.ai_service import ai_service
+    
     stored = crud_suggestion.latest_for_user(db, user_id=current_user.id)
     if stored:
         return [schemas.WellbeingSuggestion.from_orm(s) for s in stored]

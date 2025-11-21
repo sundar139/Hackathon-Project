@@ -7,3 +7,4 @@ from .peer_group import PeerGroup, GroupMember
 from .intervention import Intervention, InterventionSession
 from .chat import ChatSession
 from .user_settings import UserSettings
+from .goal import Goal, GoalSession

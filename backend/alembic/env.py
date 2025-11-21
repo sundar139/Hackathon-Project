@@ -23,6 +23,8 @@ if config.config_file_name is not None:
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 from app.db.base import Base
+# Import all models so Alembic can detect them
+from app.models import user, assignment, schedule, mood, suggestion, peer_group, intervention, chat, user_settings, goal
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,

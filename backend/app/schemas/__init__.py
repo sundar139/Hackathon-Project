@@ -10,3 +10,4 @@ from .intervention import Intervention, InterventionCreate, InterventionSession,
 from .chat import ChatSession, ChatSessionCreate, ChatMessage
 from .user_settings import UserSettings, UserSettingsCreate, UserSettingsUpdate
 from .activity import ActivitySession, ActivitySessionCreate, ActivitySessionUpdate
+from .goal import GoalOut, GoalCreate, GoalUpdate, GoalSessionOut, GoalSessionCreate, GoalSessionScheduleResponse, SuggestTimesRequest, SuggestTimesResponse, TimeSuggestion

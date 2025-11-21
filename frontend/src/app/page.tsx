@@ -23,12 +23,23 @@ interface Assignment {
   subtasks?: Array<{ id: number }>
 }
 
+interface ScheduleBlock {
+  id: number
+  title: string
+  start_at: string
+  end_at: string
+  type: string
+  status: string
+  source: string
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const token = useAuthStore(state => state.token)
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [scheduleBlocks, setScheduleBlocks] = useState<Array<{ id: number; title: string; start_at: string; end_at: string; type?: string; assignment_id?: number; importance_level?: string }>>([])
   const [courses, setCourses] = useState<Array<{ id: number; name: string; code?: string }>>([])
+  const [scheduleBlocks, setScheduleBlocks] = useState<ScheduleBlock[]>([])
   const [selectedDate, setSelectedDate] = useState<Date>(new Date()) // Today by default
   const [userName, setUserName] = useState("Student")
   const [greeting, setGreeting] = useState("Good Morning")
@@ -47,6 +58,11 @@ export default function DashboardPage() {
     } catch (error) {
       const status = (error as unknown as { response?: { status?: number } })?.response?.status
       if (status === 401) return
+    } catch (error: any) {
+      // 401 errors are handled by the API interceptor (logout + redirect)
+      if (error.response?.status === 401) {
+        return
+      }
       console.error("Failed to fetch assignments", error)
     }
   }, [])
@@ -76,6 +92,20 @@ export default function DashboardPage() {
   }, [])
 
   const fetchUserName = useCallback(async () => {
+  const fetchScheduleBlocks = async () => {
+    try {
+      const response = await api.get("/schedule/", { params: { limit: 1000 } })
+      setScheduleBlocks(response.data || [])
+    } catch (error: any) {
+      // 401 errors are handled by the API interceptor (logout + redirect)
+      if (error.response?.status === 401) {
+        return
+      }
+      console.error("Failed to fetch schedule blocks", error)
+    }
+  }
+
+  const fetchUserName = async () => {
     try {
       const response = await api.get("/users/me")
       if (response.data?.full_name) {
@@ -84,6 +114,12 @@ export default function DashboardPage() {
       }
     } catch {
       // Silently ignore, e.g. on 401
+    } catch (error: any) {
+      // 401 errors are handled by the API interceptor (logout + redirect)
+      if (error.response?.status === 401) {
+        return
+      }
+      console.log("Using default name")
     }
   }, [])
 
@@ -171,13 +207,16 @@ export default function DashboardPage() {
   }, [assignments, scheduleBlocks])
 
   useEffect(() => {
-    if (!token) {
+    // Check token on mount and when it changes
+    const currentToken = useAuthStore.getState().token
+    if (!currentToken) {
       router.replace("/login")
       return
     }
 
     const id = setTimeout(() => {
       fetchAssignments()
+      fetchScheduleBlocks()
       fetchUserName()
       updateGreeting()
       fetchScheduleBlocks()
@@ -188,15 +227,36 @@ export default function DashboardPage() {
     const handleBreakStarted = () => { fetchAssignments(); fetchScheduleBlocks(); fetchCourses() }
     const handleAssignmentUpdated = () => { fetchAssignments(); fetchScheduleBlocks(); fetchCourses() }
     const handleAssignmentAdded = () => { fetchAssignments(); fetchScheduleBlocks(); fetchCourses() }
+    const handleBreakComplete = () => {
+      fetchAssignments()
+      fetchScheduleBlocks()
+    }
+    const handleBreakStarted = () => {
+      fetchAssignments()
+      fetchScheduleBlocks()
+    }
+    const handleAssignmentUpdated = () => {
+      fetchAssignments()
+      fetchScheduleBlocks()
+    }
+    const handleAssignmentAdded = () => {
+      fetchAssignments()
+      fetchScheduleBlocks()
+    }
+    const handleScheduleUpdated = () => {
+      fetchScheduleBlocks()
+    }
     window.addEventListener('breakCompleted', handleBreakComplete)
     window.addEventListener('breakStarted', handleBreakStarted)
     window.addEventListener('assignmentUpdated', handleAssignmentUpdated)
     window.addEventListener('assignmentAdded', handleAssignmentAdded)
+    window.addEventListener('scheduleUpdated', handleScheduleUpdated)
     return () => {
       window.removeEventListener('breakCompleted', handleBreakComplete)
       window.removeEventListener('breakStarted', handleBreakStarted)
       window.removeEventListener('assignmentUpdated', handleAssignmentUpdated)
       window.removeEventListener('assignmentAdded', handleAssignmentAdded)
+      window.removeEventListener('scheduleUpdated', handleScheduleUpdated)
       clearTimeout(id)
     }
   }, [token, router, fetchAssignments, fetchUserName, updateGreeting, fetchScheduleBlocks, fetchCourses])
@@ -232,6 +292,8 @@ export default function DashboardPage() {
             date={selectedDate}
             blocks={scheduleBlocks}
             assignments={assignments}
+            tasks={assignments}
+            scheduleBlocks={scheduleBlocks}
           />
         </div>
 

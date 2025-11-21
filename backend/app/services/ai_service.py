@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional
 import random
+from datetime import datetime, timezone
 from app.core.config import settings
 
 # Try to import OpenAI, but don't fail if it's not installed
@@ -560,5 +561,187 @@ Keep responses concise (2-3 sentences). Be warm, supportive, and actionable. If 
             "category": "movement",
         })
         return suggestions[:5]
+
+    async def rank_time_slots(
+        self,
+        goal_name: str,
+        duration_minutes: int,
+        preferred_time_window: Optional[str],
+        target_date: str,
+        existing_blocks: List[Dict[str, Any]],
+        candidate_slots: List[Dict[str, str]],
+    ) -> List[Dict[str, Any]]:
+        """
+        Use LLM to rank and select the best time slots from candidates, generating user-friendly reasons.
+        Returns a list of slot dicts with 'start', 'end', and 'reason' keys.
+        Falls back to mock/rule-based if LLM is unavailable.
+        """
+        if self.use_real_ai and candidate_slots:
+            try:
+                import json
+                
+                # Prepare existing blocks summary
+                blocks_summary = [
+                    {
+                        "start": block.get("start", ""),
+                        "end": block.get("end", ""),
+                        "title": block.get("title", "Event"),
+                        "type": block.get("type", "UNKNOWN")
+                    }
+                    for block in existing_blocks
+                ]
+                
+                system_prompt = """You are a friendly but pragmatic scheduling assistant helping a student plan personal goals around existing calendar blocks. 
+You must ONLY choose from the candidate time slots provided and respond in strict JSON format.
+Select up to 3 of the most suitable slots considering:
+- The goal's preferred time window (if specified)
+- Natural breaks between existing commitments
+- Energy levels throughout the day
+- Avoid rushing between back-to-back events
+
+For each selected slot, provide a brief, encouraging reason (1-2 sentences max) explaining why it's a good fit."""
+
+                user_prompt = f"""Goal: {goal_name}
+Duration: {duration_minutes} minutes
+Preferred time window: {preferred_time_window or 'No preference'}
+Target date: {target_date}
+
+Existing calendar blocks for this day:
+{json.dumps(blocks_summary, indent=2) if blocks_summary else 'None'}
+
+Candidate time slots (you must choose from these):
+{json.dumps(candidate_slots, indent=2)}
+
+Return JSON in this exact format:
+{{
+  "slots": [
+    {{
+      "start": "ISO_DATETIME",
+      "end": "ISO_DATETIME",
+      "reason": "Short, friendly explanation why this slot works well"
+    }}
+  ]
+}}
+
+Select the best 2-3 slots from the candidate list. Only include slots that are in the candidate_slots list above."""
+
+                # Try to use JSON mode if available (OpenAI API >= 2024-07-01)
+                try:
+                    response = await self.client.chat.completions.create(
+                        model=self.model_fast,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        temperature=0.7,
+                        max_tokens=600,
+                        response_format={"type": "json_object"}
+                    )
+                except TypeError:
+                    # Fallback if response_format not supported
+                    response = await self.client.chat.completions.create(
+                        model=self.model_fast,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        temperature=0.7,
+                        max_tokens=600
+                    )
+                
+                content = response.choices[0].message.content.strip()
+                
+                # Remove markdown code blocks if present
+                if content.startswith("```"):
+                    content = content.split("```")[1]
+                    if content.startswith("json"):
+                        content = content[4:]
+                    content = content.strip()
+                
+                result = json.loads(content)
+                
+                # Validate and extract slots
+                if "slots" in result and isinstance(result["slots"], list):
+                    # Ensure all slots are valid (present in candidates)
+                    candidate_starts = {slot["start"] for slot in candidate_slots}
+                    valid_slots = []
+                    for slot in result["slots"]:
+                        if slot.get("start") in candidate_starts:
+                            valid_slots.append({
+                                "start": slot["start"],
+                                "end": slot.get("end", ""),
+                                "reason": slot.get("reason", "Good time slot")
+                            })
+                    if valid_slots:
+                        return valid_slots[:3]  # Return max 3
+                
+            except Exception as e:
+                print(f"Error calling OpenAI for time slot ranking: {e}")
+                # Fall through to mock/fallback logic
+        
+        # Fallback: Return first 2-3 candidate slots with rule-based reasons
+        ranked_slots = []
+        for i, slot in enumerate(candidate_slots[:3]):
+            try:
+                # Parse datetime from ISO format
+                start_str = slot["start"]
+                if start_str.endswith("Z"):
+                    start_str = start_str[:-1] + "+00:00"
+                elif "+" not in start_str and start_str.count(":") >= 2:
+                    # Add UTC timezone if missing
+                    if "." in start_str:
+                        start_str = start_str.split(".")[0] + "+00:00"
+                    else:
+                        start_str = start_str + "+00:00"
+                
+                start_dt = datetime.fromisoformat(start_str)
+                hour = start_dt.hour if start_dt.tzinfo else start_dt.replace(tzinfo=timezone.utc).hour
+            except (ValueError, KeyError):
+                hour = 12  # Default to afternoon
+            
+            if hour < 12:
+                reason = "Morning slot - fresh start for your goal"
+            elif hour < 17:
+                reason = "Afternoon slot - good energy levels"
+            else:
+                reason = "Evening slot - wrap up your day positively"
+            
+            ranked_slots.append({
+                "start": slot["start"],
+                "end": slot["end"],
+                "reason": reason
+            })
+        
+        return ranked_slots
+
+    async def generate_busy_day_message(self, target_date: str) -> str:
+        """
+        Generate an empathetic message when no time slots are available.
+        Falls back to default message if LLM is unavailable.
+        """
+        if self.use_real_ai:
+            try:
+                prompt = f"""A student's calendar is quite full on {target_date}. 
+Generate a brief, empathetic message (2-3 sentences) acknowledging this and suggesting they consider alternatives like shorter duration or another day.
+Be supportive and encouraging, not discouraging."""
+
+                response = await self.client.chat.completions.create(
+                    model=self.model_fast,
+                    messages=[
+                        {"role": "system", "content": "You are a supportive scheduling assistant. Be brief and encouraging."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.7,
+                    max_tokens=150
+                )
+                
+                message = response.choices[0].message.content.strip()
+                return message
+            except Exception as e:
+                print(f"Error calling OpenAI for busy day message: {e}")
+                # Fall through to default
+        
+        # Default fallback message
+        return f"Your calendar is quite full on {target_date}. Consider these alternatives:"
 
 ai_service = AIService()

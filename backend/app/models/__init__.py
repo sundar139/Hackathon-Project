@@ -8,3 +8,4 @@ from .intervention import Intervention, InterventionSession
 from .chat import ChatSession
 from .user_settings import UserSettings
 from .activity import ActivitySession
+from .goal import Goal, GoalSession

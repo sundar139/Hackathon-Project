@@ -45,6 +45,6 @@ class Settings(BaseSettings):
                     f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
                 )
             else:
-                self.SQLALCHEMY_DATABASE_URI = "sqlite:///./assignwell.db"
+                raise ValueError("SQLALCHEMY_DATABASE_URI is not configured. Set DATABASE_URL or POSTGRES_* in .env")
 
 settings = Settings()

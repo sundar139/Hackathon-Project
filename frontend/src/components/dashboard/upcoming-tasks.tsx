@@ -1,43 +1,46 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Circle, CheckCircle2 } from "lucide-react"
-import api from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-interface Assignment {
+interface Item {
   id: number
   title: string
-  due_at: string
-  importance_level: string
+  due_at?: string
+  start_at?: string
+  end_at?: string
+  importance_level?: string
   status?: string
+  assignment_id?: number
+  subtask_id?: number
 }
 
 interface UpcomingTasksProps {
-  tasks: Assignment[]
+  tasks: Item[]
   selectedDate?: Date
+  assignmentsIndex?: Record<number, { id: number; title: string; course_id?: number }>
+  coursesIndex?: Record<number, { id: number; name: string; code?: string }>
+  subtaskIndex?: Record<number, { assignment_id: number; title: string; course_id?: number }>
 }
 
-export function UpcomingTasks({ tasks, selectedDate }: UpcomingTasksProps) {
+export function UpcomingTasks({ tasks, selectedDate, assignmentsIndex, coursesIndex, subtaskIndex }: UpcomingTasksProps) {
   const today = selectedDate || new Date()
   const tomorrow = new Date(today)
   tomorrow.setDate(tomorrow.getDate() + 1)
   const [completedIds, setCompletedIds] = useState<number[]>([])
-  const [excludedBreakTitles, setExcludedBreakTitles] = useState<string[]>(["Quick Break"]) 
+  const [excludedBreakTitles] = useState<string[]>(() => {
+    try {
+      const raw = typeof window !== 'undefined' ? window.localStorage.getItem('assignwell.excludedBreakTitles') : null
+      const parsed = raw ? JSON.parse(raw) as string[] : null
+      if (Array.isArray(parsed) && parsed.length) return parsed
+    } catch {}
+    return ["Quick Break"]
+  })
   const threeDaysOut = new Date(today)
   threeDaysOut.setDate(threeDaysOut.getDate() + 3)
 
-  useEffect(() => {
-    try {
-      const raw = typeof window !== 'undefined' ? window.localStorage.getItem('assignwell.excludedBreakTitles') : null
-      if (raw) {
-        const parsed = (() => {
-          try { return JSON.parse(raw) as string[] } catch { return [] }
-        })()
-        if (Array.isArray(parsed) && parsed.length) setExcludedBreakTitles(parsed)
-      }
-    } catch {}
-  }, [])
+  
 
   const priorityRank = (level: string) => {
     switch (level?.toLowerCase()) {
@@ -51,7 +54,9 @@ export function UpcomingTasks({ tasks, selectedDate }: UpcomingTasksProps) {
 
   const upcomingTasks = tasks
     .filter(task => {
-      const dueDate = new Date(task.due_at)
+      const base = task.start_at || task.due_at
+      if (!base) return false
+      const dueDate = new Date(base)
       const titleNorm = (task.title || '').trim().toLowerCase()
       const isExcluded = excludedBreakTitles.some(t => titleNorm === t.trim().toLowerCase())
       const notCompleted = task.status?.toLowerCase() !== 'completed'
@@ -59,9 +64,11 @@ export function UpcomingTasks({ tasks, selectedDate }: UpcomingTasksProps) {
       return dueDate >= today && dueDate <= threeDaysOut && !isExcluded && notCompleted && notLocallyCompleted
     })
     .sort((a, b) => {
-      const prDiff = priorityRank(b.importance_level) - priorityRank(a.importance_level)
+      const prDiff = priorityRank((b.importance_level || '')) - priorityRank((a.importance_level || ''))
       if (prDiff !== 0) return prDiff
-      return new Date(a.due_at).getTime() - new Date(b.due_at).getTime()
+      const ad = new Date(a.start_at || a.due_at || '').getTime()
+      const bd = new Date(b.start_at || b.due_at || '').getTime()
+      return ad - bd
     })
     .slice(0, 5)
 
@@ -82,6 +89,19 @@ export function UpcomingTasks({ tasks, selectedDate }: UpcomingTasksProps) {
     return `Due ${due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} • ${timeWithTz}`
   }
 
+  const toTitleCase = (s: string | undefined | null) => {
+    const t = String(s || "").toLowerCase()
+    return t.replace(/\b\w+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1))
+  }
+
+  const splitTitle = (title: string) => {
+    const parts = String(title || "").split(" - ")
+    if (parts.length > 1) {
+      return { assignment: parts[0], task: parts.slice(1).join(" - ") }
+    }
+    return { assignment: "", task: title }
+  }
+
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm h-full flex flex-col">
       <h2 className="text-lg font-bold text-gray-900 mb-3">Upcoming Tasks</h2>
@@ -89,24 +109,29 @@ export function UpcomingTasks({ tasks, selectedDate }: UpcomingTasksProps) {
       <div className="space-y-2 flex-1 overflow-y-auto">
         {upcomingTasks.map((task) => {
           const isCompleted = task.status?.toLowerCase() === 'completed'
-          const isBreak = (task.title || '').toLowerCase().includes('break')
+          const { assignment } = splitTitle(task.title || '')
+          const assignmentInfo = (task.assignment_id && assignmentsIndex)
+            ? assignmentsIndex[task.assignment_id]
+            : (task.subtask_id && subtaskIndex)
+            ? subtaskIndex[task.subtask_id]
+            : undefined
+          const assignmentName = assignmentInfo?.title || assignment
+          const courseId = (assignmentInfo && 'course_id' in assignmentInfo) ? assignmentInfo.course_id : assignmentInfo?.course_id
+          const course = (typeof courseId === 'number' && coursesIndex) ? coursesIndex[courseId] : undefined
+          const courseLabel = course ? (course.code ? `${course.code} - ${course.name}` : course.name) : undefined
 
           const handleComplete = async () => {
-            try {
-              // Try PATCH for partial update; fallback to PUT with full payload
-              await api.patch?.(`/assignments/${task.id}`, { status: 'COMPLETED' })
-                .catch(async () => {
-                  await api.put(`/assignments/${task.id}`, {
-                    title: task.title,
-                    due_at: task.due_at,
-                    importance_level: task.importance_level,
-                    status: 'COMPLETED',
-                  })
-                })
-            } catch {
-            }
             setCompletedIds(prev => (prev.includes(task.id) ? prev : [...prev, task.id]))
-            window.dispatchEvent(new CustomEvent('assignmentUpdated', { detail: { id: task.id, status: 'COMPLETED' } }))
+            const assignmentIdToMark = (() => {
+              if (task.assignment_id && assignmentsIndex?.[task.assignment_id]) return task.assignment_id
+              if (task.subtask_id && subtaskIndex?.[task.subtask_id]) return subtaskIndex![task.subtask_id!].assignment_id
+              return null
+            })()
+            if (assignmentIdToMark) {
+              window.dispatchEvent(new CustomEvent('assignmentUpdated', { detail: { id: assignmentIdToMark, status: 'COMPLETED' } }))
+            } else {
+              window.dispatchEvent(new CustomEvent('taskCompleted', { detail: { id: task.id, status: 'COMPLETED' } }))
+            }
           }
 
           return (
@@ -130,23 +155,25 @@ export function UpcomingTasks({ tasks, selectedDate }: UpcomingTasksProps) {
                   "font-medium text-sm",
                   isCompleted ? "line-through text-gray-500" : "text-gray-900"
                 )}>
-                  {task.title}
+                  {toTitleCase(task.title)}
                 </h3>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={cn(
-                    "text-xs px-2 py-0.5 rounded-full border",
-                    isBreak ? "bg-gray-100 text-gray-700 border-gray-200" : "bg-indigo-100 text-indigo-700 border-indigo-200"
-                  )}>
-                    {isBreak ? "Break" : "Task"}
-                  </span>
-                  <span className={cn(
-                    "text-xs px-2 py-0.5 rounded-full border",
-                    getPriorityColor(task.importance_level)
-                  )}>
-                    {task.importance_level}
-                  </span>
+                  {(assignmentName || courseLabel) && (
+                    <span className="text-xs px-2 py-0.5 rounded-full border bg-blue-100 text-blue-700 border-blue-200">
+                      {toTitleCase(assignmentName || '')}{courseLabel ? ` • ${courseLabel}` : ''}
+                    </span>
+                  )}
+                  
+                  {task.importance_level && (
+                    <span className={cn(
+                      "text-xs px-2 py-0.5 rounded-full border",
+                      getPriorityColor(task.importance_level)
+                    )}>
+                      {task.importance_level}
+                    </span>
+                  )}
                   <span className="text-xs text-gray-500">
-                    {getDueText(task.due_at)}
+                    {getDueText(task.start_at || task.due_at || new Date().toISOString())}
                   </span>
                 </div>
               </div>

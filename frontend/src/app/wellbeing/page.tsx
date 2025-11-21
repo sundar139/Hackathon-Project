@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -92,7 +92,7 @@ export default function WellBeingPage() {
     const [applyStart, setApplyStart] = useState<Date | null>(null)
     const [applyMinutes, setApplyMinutes] = useState<number>(30)
 
-  const fetchMoodHistory = async () => {
+  const fetchMoodHistory = useCallback(async () => {
     try {
       if (!token) return
       const response = await api.get("/mood/", { params: { limit: 60 } })
@@ -105,7 +105,7 @@ export default function WellBeingPage() {
                 "very_positive": 5
             }
 
-            type MoodLog = { created_at: string; mood_valence: string; energy_level: number; stress_level: number; sleep_hours_last_night?: number; additional_metrics?: any }
+            type MoodLog = { created_at: string; mood_valence: string; energy_level: number; stress_level: number; sleep_hours_last_night?: number; additional_metrics?: { cognitive_load?: number; emotional_intensity?: number; productivity_confidence?: number } }
             const logs = response.data as MoodLog[]
             const dateStrings = new Set(logs.map(l => new Date(l.created_at).toDateString()))
             const today = new Date()
@@ -140,11 +140,11 @@ export default function WellBeingPage() {
             const sevenDaysAgo = new Date(now)
             sevenDaysAgo.setDate(now.getDate() - 7)
             const lastWeek = logs.filter(l => new Date(l.created_at) >= sevenDaysAgo)
-            const sleepSum = lastWeek.reduce((sum, l) => sum + (Number((l as any).sleep_hours_last_night ?? 0) || 0), 0)
+            const sleepSum = lastWeek.reduce((sum, l) => sum + (Number(l.sleep_hours_last_night ?? 0) || 0), 0)
             const checkins = lastWeek.length
             const avgEnergy = lastWeek.length ? (lastWeek.reduce((sum, l) => sum + (Number(l.energy_level) || 0), 0) / lastWeek.length) : 0
             const avgStress = lastWeek.length ? (lastWeek.reduce((sum, l) => sum + (Number(l.stress_level) || 0), 0) / lastWeek.length) : 0
-            const avgCognitive = lastWeek.length ? (lastWeek.reduce((sum, l) => sum + (Number((l as any).additional_metrics?.cognitive_load ?? 0) || 0), 0) / lastWeek.length) : 0
+            const avgCognitive = lastWeek.length ? (lastWeek.reduce((sum, l) => sum + (Number(l.additional_metrics?.cognitive_load ?? 0) || 0), 0) / lastWeek.length) : 0
 
             setActivityData([
               { name: "Sleep (hrs)", hours: Math.round(sleepSum * 10) / 10 },
@@ -156,41 +156,41 @@ export default function WellBeingPage() {
               { name: "Cognitive (avg)", value: Math.round(avgCognitive * 10) / 10 },
             ])
         } catch (error) {
-      const status = (error as any)?.response?.status
+      const status = (error as unknown as { response?: { status?: number } })?.response?.status
       if (status === 401) {
         return
       }
       console.error("Failed to fetch mood history", error)
     }
-  }
+  }, [token])
 
-  const fetchAiInsight = async () => {
+  const fetchAiInsight = useCallback(async () => {
     try {
       if (!token) return
       const response = await api.post("/mood/analyze")
       setAiInsight(response.data.insight)
         } catch (error) {
-      const status = (error as any)?.response?.status
+      const status = (error as unknown as { response?: { status?: number } })?.response?.status
       if (status === 401) {
         return
       }
       console.error("Failed to fetch AI insight", error)
     }
-  }
+  }, [token])
 
-  const fetchSuggestions = async () => {
+  const fetchSuggestions = useCallback(async () => {
     try {
       if (!token) return
       const response = await api.get("/mood/suggestions")
       setSuggestions(response.data || [])
     } catch (error) {
-      const status = (error as any)?.response?.status
+      const status = (error as unknown as { response?: { status?: number } })?.response?.status
       if (status === 401) {
         return
       }
       console.error("Failed to fetch suggestions", error)
     }
-  }
+  }, [token])
 
   const applySuggestion = async (s: { title: string; category: string }) => {
     try {
@@ -218,7 +218,7 @@ export default function WellBeingPage() {
       }
       setApplyStart(candidate)
       setApplyOpen(true)
-    } catch (error) {}
+    } catch {}
   }
 
   const handleReplan = async () => {
@@ -228,8 +228,8 @@ export default function WellBeingPage() {
       const items = (res.data || []) as Array<{ start_at: string; end_at: string; title?: string }>
       setReplanSuggestions(items)
       setReplanOpen(true)
-    } catch (e) {
-      console.error("Failed to replan week", e)
+    } catch {
+      console.error("Failed to replan week")
     }
   }
 
@@ -244,7 +244,7 @@ export default function WellBeingPage() {
       fetchSuggestions()
     }, 0)
     return () => clearTimeout(id)
-  }, [token, router])
+  }, [token, router, fetchMoodHistory, fetchAiInsight, fetchSuggestions])
 
     const handleCheckIn = async () => {
         try {
@@ -298,6 +298,9 @@ export default function WellBeingPage() {
             })
             fetchMoodHistory()
             fetchAiInsight()
+            if (typeof window !== 'undefined') {
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+            }
         } catch (error) {
             console.error("Failed to save check-in", error)
         }
@@ -518,7 +521,7 @@ export default function WellBeingPage() {
                                   }
                                   const res = await api.post("/mood/infer-metrics", payload)
                                   setCheckin({ ...checkin, additional_metrics: { ...checkin.additional_metrics, ...res.data } })
-                                } catch (e) {}
+                                } catch {}
                               }}>Auto-fill metrics</Button>
                             </div>
 
@@ -798,7 +801,7 @@ export default function WellBeingPage() {
                                         <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                                         <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
                                         <YAxis fontSize={12} tickLine={false} axisLine={false} />
-                                        <Tooltip formatter={(val:any, name:any) => [val, name]} />
+                                        <Tooltip formatter={(val: number | string, name: string) => [val, name]} />
                                         <Legend />
                                         <Bar dataKey="hours" name="Value" fill="url(#activityGradient)" radius={[4, 4, 0, 0]} />
                                     </BarChart>
@@ -839,7 +842,7 @@ export default function WellBeingPage() {
                                         <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                                         <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
                                         <YAxis domain={[0,5]} fontSize={12} tickLine={false} axisLine={false} />
-                                        <Tooltip formatter={(val:any, name:any) => [val, name]} />
+                                        <Tooltip formatter={(val: number | string, name: string) => [val, name]} />
                                         <Legend />
                                         <Bar dataKey="value" name="Avg" fill="url(#engGradient)" radius={[4, 4, 0, 0]} />
                                     </BarChart>

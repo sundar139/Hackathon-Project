@@ -9,4 +9,5 @@ from .peer_group import PeerGroup, PeerGroupCreate, PeerGroupUpdate, GroupMember
 from .intervention import Intervention, InterventionCreate, InterventionSession, InterventionSessionCreate, InterventionSessionUpdate
 from .chat import ChatSession, ChatSessionCreate, ChatMessage
 from .user_settings import UserSettings, UserSettingsCreate, UserSettingsUpdate
+from .activity import ActivitySession, ActivitySessionCreate, ActivitySessionUpdate
 from .goal import GoalOut, GoalCreate, GoalUpdate, GoalSessionOut, GoalSessionCreate, GoalSessionScheduleResponse, SuggestTimesRequest, SuggestTimesResponse, TimeSuggestion

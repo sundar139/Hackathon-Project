@@ -19,7 +19,16 @@ export default function SettingsPage() {
         notifications_enabled: true
     })
     const [isLoading, setIsLoading] = useState(false)
-    const [breakTitlesText, setBreakTitlesText] = useState("")
+    const [breakTitlesText, setBreakTitlesText] = useState<string>(() => {
+        try {
+            const raw = typeof window !== 'undefined' ? window.localStorage.getItem('assignwell.excludedBreakTitles') : null
+            if (raw) {
+                const parsed = (() => { try { return JSON.parse(raw) as string[] } catch { return [] } })()
+                if (Array.isArray(parsed) && parsed.length) return parsed.join(", ")
+            }
+        } catch {}
+        return "Quick Break"
+    })
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -37,15 +46,6 @@ export default function SettingsPage() {
             }
         }
         fetchSettings()
-        try {
-            const raw = typeof window !== 'undefined' ? window.localStorage.getItem('assignwell.excludedBreakTitles') : null
-            if (raw) {
-                const parsed = (() => { try { return JSON.parse(raw) as string[] } catch { return [] } })()
-                if (Array.isArray(parsed) && parsed.length) setBreakTitlesText(parsed.join(", "))
-            } else {
-                setBreakTitlesText("Quick Break")
-            }
-        } catch {}
     }, [])
 
     const handleSave = async () => {

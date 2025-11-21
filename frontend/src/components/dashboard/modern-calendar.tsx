@@ -7,16 +7,17 @@ import { cn } from "@/lib/utils"
 import { useToast } from "@/components/ui/use-toast"
 import { AddTaskDialog } from "./add-task-dialog"
 
-interface Assignment {
+interface Item {
     id: number
     title: string
-    due_at: string
-    importance_level: string
+    due_at?: string
+    start_at?: string
+    importance_level?: string
     status?: string
 }
 
 interface ModernCalendarProps {
-    tasks: Assignment[]
+    tasks: Item[]
     selectedDate: Date
     onDateSelect: (date: Date) => void
     onTaskAdded?: () => void
@@ -45,7 +46,9 @@ export function ModernCalendar({ tasks, selectedDate, onDateSelect, onTaskAdded 
 
     const getTasksForDay = (day: number) => {
         return tasks.filter(task => {
-            const taskDate = new Date(task.due_at)
+            const base = task.start_at || task.due_at
+            if (!base) return false
+            const taskDate = new Date(base)
             return taskDate.getDate() === day && taskDate.getMonth() === month && taskDate.getFullYear() === year
         })
     }
@@ -79,7 +82,7 @@ export function ModernCalendar({ tasks, selectedDate, onDateSelect, onTaskAdded 
     const handleExportICS = () => {
         let icsContent = `BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//AssignWell//EN\n`
         tasks.forEach(task => {
-            const dueDate = new Date(task.due_at)
+            const dueDate = new Date(task.start_at || task.due_at || new Date())
             const formatDate = (date: Date) => date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
             icsContent += `BEGIN:VEVENT\nUID:${task.id}@assignwell.app\nDTSTART:${formatDate(dueDate)}\nSUMMARY:${task.title}\nEND:VEVENT\n`
         })

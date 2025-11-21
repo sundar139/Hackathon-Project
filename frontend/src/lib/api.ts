@@ -42,7 +42,7 @@ api.interceptors.response.use(
                     const cfg = error.config
                     cfg.baseURL = base
                     return await api.request(cfg)
-                } catch (e) {
+                } catch {
                     continue
                 }
             }

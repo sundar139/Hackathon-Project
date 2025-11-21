@@ -12,6 +12,7 @@ from app.api.api_v1.endpoints import (
     chat,
     peer_groups,
     courses,
+    activity,
 )
 
 api_router = APIRouter()
@@ -25,3 +26,4 @@ api_router.include_router(interventions.router, prefix="/interventions", tags=["
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(peer_groups.router, prefix="/peer-groups", tags=["peer-groups"])
 api_router.include_router(courses.router, prefix="/courses", tags=["courses"])
+api_router.include_router(activity.router, prefix="/activity", tags=["activity"])

@@ -60,6 +60,7 @@ export default function AssignmentsPage() {
         user_confidence: 3,
         importance_level: "medium"
     })
+    const [newAssignmentCourseText, setNewAssignmentCourseText] = useState<string>("")
     const [importText, setImportText] = useState("")
     const [importFileName, setImportFileName] = useState("")
     const [plannerTitle, setPlannerTitle] = useState("")
@@ -79,6 +80,10 @@ export default function AssignmentsPage() {
     const [allAssignmentsQuery, setAllAssignmentsQuery] = useState<string>("")
     const [assignmentsSortBy, setAssignmentsSortBy] = useState<"due" | "importance">("due")
     const [assignmentsCourseFilter, setAssignmentsCourseFilter] = useState<string>("")
+    const toTitleCase = (s: string | undefined | null) => {
+        const t = String(s || "").toLowerCase()
+        return t.replace(/\b\w+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1))
+    }
     const downloadAssignments = (format: "json" | "csv", items: Assignment[]) => {
         if (format === "json") {
             const blob = new Blob([JSON.stringify(items, null, 2)], { type: "application/json" })
@@ -193,9 +198,10 @@ export default function AssignmentsPage() {
 
     const handleCreateAssignment = async () => {
         try {
+            const resolvedCourseId = newAssignment.course_id ? parseInt(newAssignment.course_id) : await resolveCourseId(newAssignmentCourseText)
             await api.post("/assignments/", {
-                title: newAssignment.title,
-                course_id: newAssignment.course_id ? parseInt(newAssignment.course_id) : null,
+                title: toTitleCase(newAssignment.title),
+                course_id: resolvedCourseId ?? null,
                 due_at: (() => {
                     if (!newAssignment.due_at) return undefined
                     const d = new Date(newAssignment.due_at)
@@ -230,16 +236,7 @@ export default function AssignmentsPage() {
         }
     }
 
-    const handleGeneratePlan = async (assignmentId: number) => {
-        try {
-            await api.post(`/assignments/${assignmentId}/plan`)
-            alert("AI plan generated successfully!")
-            fetchAssignments()
-        } catch (error) {
-            console.error("Failed to generate plan", error)
-            alert("Failed to generate plan. Please try again.")
-        }
-    }
+    
 
     const handleImportFile = async (file: File | null) => {
         try {
@@ -269,7 +266,7 @@ export default function AssignmentsPage() {
                     setImportText(text)
                     setTitleIfEmpty()
                     return
-                } catch (e) {
+                } catch {
                     const text = await file.text().catch(() => "")
                     setImportText(text || "")
                     setTitleIfEmpty()
@@ -281,25 +278,28 @@ export default function AssignmentsPage() {
             if (name.endsWith(".pdf") || type.includes("pdf")) {
                 try {
                     const pdfjsLib = await import("pdfjs-dist")
-                    // @ts-ignore set worker to empty; Next.js build includes default worker
+                    // @ts-expect-error set worker to empty; Next.js build includes default worker
                     pdfjsLib.GlobalWorkerOptions.workerSrc = undefined
                     const buffer = await file.arrayBuffer()
                     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
                     let full = ""
+                    const getStr = (it: unknown): string => {
+                        const obj = it as { str?: unknown }
+                        return typeof obj.str === "string" ? obj.str : ""
+                    }
                     for (let i = 1; i <= pdf.numPages; i++) {
                         const page = await pdf.getPage(i)
                         const content = await page.getTextContent()
-                        const strings = (content?.items || []).map((item: any) => {
-                            const s = (item?.str ?? "") as string
-                            return s
-                        })
+                        const strings = (Array.isArray(content?.items) ? content.items : [])
+                            .map(getStr)
+                            .filter((s) => s !== "")
                         full += strings.join(" ") + "\n"
                     }
                     const text = full.replace(/\s+/g, " ").trim()
                     setImportText(text)
                     setTitleIfEmpty()
                     return
-                } catch (e) {
+                } catch {
                     const text = await file.text().catch(() => "")
                     setImportText(text || "")
                     setTitleIfEmpty()
@@ -347,8 +347,9 @@ export default function AssignmentsPage() {
             const planRes = await api.post(`/assignments/${created.id}/plan`, undefined, { timeout: 60000 })
             const subtasks = (planRes?.data as Array<{ id: number; title: string; estimated_minutes: number; order_index?: number }>) || []
             const moodRes = await api.get("/mood/", { params: { limit: 1 }, timeout: 10000 })
-            const latestMood = (Array.isArray(moodRes?.data) && moodRes.data.length > 0) ? moodRes.data[0] as any : null
-            const burnout = latestMood?.additional_metrics?.burnout_indicator as string | undefined
+            type MoodItem = { additional_metrics?: { burnout_indicator?: string } }
+            const latestMood: MoodItem | null = (Array.isArray(moodRes?.data) && moodRes.data.length > 0) ? (moodRes.data[0] as MoodItem) : null
+            const burnout = latestMood?.additional_metrics?.burnout_indicator
             const burnoutHeavy = burnout === "noticeable" || burnout === "a_lot"
 
             const scheduleRes = await api.get("/schedule/", { timeout: 20000 })
@@ -433,7 +434,7 @@ export default function AssignmentsPage() {
 
             const totalMin = Math.max(0, scheduled.reduce((acc, s) => acc + Math.max(15, Math.round(s.estimated_minutes || 30)), 0))
             const countDays = (start: Date, finish: Date, includeWeekends: boolean) => {
-                let d = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+                const d = new Date(start.getFullYear(), start.getMonth(), start.getDate())
                 const last = new Date(finish.getFullYear(), finish.getMonth(), finish.getDate())
                 let count = 0
                 while (d <= last) {
@@ -483,8 +484,9 @@ export default function AssignmentsPage() {
         try {
             if (!plannedSubtasks.length) return
             const moodRes = await api.get("/mood/", { params: { limit: 1 }, timeout: 10000 })
-            const latestMood = (Array.isArray(moodRes?.data) && moodRes.data.length > 0) ? moodRes.data[0] as any : null
-            const burnout = latestMood?.additional_metrics?.burnout_indicator as string | undefined
+            type MoodItem = { additional_metrics?: { burnout_indicator?: string } }
+            const latestMood: MoodItem | null = (Array.isArray(moodRes?.data) && moodRes.data.length > 0) ? (moodRes.data[0] as MoodItem) : null
+            const burnout = latestMood?.additional_metrics?.burnout_indicator
             const burnoutHeavy = burnout === "noticeable" || burnout === "a_lot"
 
             const scheduleRes = await api.get("/schedule/")
@@ -534,7 +536,7 @@ export default function AssignmentsPage() {
                         end_at: end.toISOString(),
                         type: "STUDY",
                         status: "PLANNED",
-                        title: plannerAssignmentTitle ? `${plannerAssignmentTitle} - ${s.title}` : s.title,
+                        title: toTitleCase(plannerAssignmentTitle ? `${plannerAssignmentTitle} - ${s.title}` : s.title),
                         assignment_id: plannerAssignmentId ?? undefined,
                         subtask_id: s.id,
                         source: "AI_SUGGESTED",
@@ -581,7 +583,7 @@ export default function AssignmentsPage() {
                         end_at: end < deadline ? end.toISOString() : deadline.toISOString(),
                         type: "STUDY",
                         status: "PLANNED",
-                        title: plannerAssignmentTitle ? `${plannerAssignmentTitle} - ${s.title}` : s.title,
+                        title: toTitleCase(plannerAssignmentTitle ? `${plannerAssignmentTitle} - ${s.title}` : s.title),
                         assignment_id: plannerAssignmentId ?? undefined,
                         subtask_id: s.id,
                         source: "AI_SUGGESTED",
@@ -642,8 +644,8 @@ export default function AssignmentsPage() {
                             <Input
                                 placeholder="Type course"
                                 className="col-span-3"
-                                value={(newAssignment as any).course_text || ""}
-                                onChange={(e) => setNewAssignment({ ...newAssignment, course_id: "", ...( { course_text: e.target.value } as any) })}
+                                value={newAssignmentCourseText}
+                                onChange={(e) => { setNewAssignmentCourseText(e.target.value); setNewAssignment({ ...newAssignment, course_id: "" }) }}
                             />
                         </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
@@ -726,19 +728,15 @@ export default function AssignmentsPage() {
                 </CardHeader>
                 <CardContent>
                     {(() => {
-                        const filtered = assignments.filter(a => !a.title?.toLowerCase().includes('break'))
-                            .filter(a => {
-                                if (!allTasksQuery.trim()) return true
-                                const q = allTasksQuery.toLowerCase()
-                                return (a.title?.toLowerCase().includes(q) || a.importance_level?.toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q))
-                            })
-                        const sorted = filtered.slice().sort((a, b) => {
-                            const aCompleted = String(a.status || '').toUpperCase() === 'COMPLETED'
-                            const bCompleted = String(b.status || '').toUpperCase() === 'COMPLETED'
-                            if (aCompleted !== bCompleted) return aCompleted ? 1 : -1
-                            const ad = a.created_at ? new Date(a.created_at).getTime() : new Date(a.due_at).getTime()
-                            const bd = b.created_at ? new Date(b.created_at).getTime() : new Date(b.due_at).getTime()
-                            return bd - ad
+                        const filteredTasks = plannedSubtasks.filter(t => {
+                            if (!allTasksQuery.trim()) return true
+                            const q = allTasksQuery.toLowerCase()
+                            return (t.title?.toLowerCase().includes(q))
+                        })
+                        const sorted = filteredTasks.slice().sort((a, b) => {
+                            const as = a.start_at ? new Date(a.start_at).getTime() : 0
+                            const bs = b.start_at ? new Date(b.start_at).getTime() : 0
+                            return as - bs
                         })
 
                         return (
@@ -749,27 +747,17 @@ export default function AssignmentsPage() {
                                 <DropdownMenuContent side="bottom" align="start" sideOffset={6} avoidCollisions={false} className="w-[860px] bg-background border shadow-xl">
                                     <ScrollArea className="h-[540px] w-full p-2">
                                         {sorted.length === 0 ? (
-                                            <div className="p-4 text-sm text-muted-foreground">No assignments found.</div>
+                                            <div className="p-4 text-sm text-muted-foreground">No tasks yet. Generate a planner to see tasks.</div>
                                         ) : (
-                                            sorted.map((assignment, idx) => (
-                                                <DropdownMenuItem key={`${assignment.id}-${idx}`} className="flex flex-col items-start space-y-1">
+                                            sorted.map((t, idx) => (
+                                                <DropdownMenuItem key={`${t.id}-${idx}`} className="flex flex-col items-start space-y-2">
                                                     <div className="flex w-full items-center justify-between">
-                                                        <span className="font-medium">{assignment.title}</span>
-                                                        <Badge variant={
-                                                            assignment.importance_level === 'high' || assignment.importance_level === 'critical' ? 'destructive' :
-                                                                assignment.importance_level === 'medium' ? 'default' : 'secondary'
-                                                        }>
-                                                            {assignment.importance_level}
-                                                        </Badge>
+                                                        <span className="font-medium text-sm">{toTitleCase(plannerAssignmentTitle)} • {toTitleCase(t.title)}</span>
+                                                        <Badge variant="secondary">Scheduled</Badge>
                                                     </div>
                                                     <div className="text-xs text-muted-foreground w-full flex justify-between">
-                                                        <span>Course: {courseLabel(assignment.course_id)}</span>
-                                                        <span>Due: {new Date(assignment.due_at).toLocaleDateString()}</span>
-                                                    </div>
-                                                    <div className="text-xs">Status: {assignment.status}</div>
-                                                    <div className="flex w-full justify-end space-x-2 pt-1">
-                                                        <Button variant="ghost" size="sm">Edit</Button>
-                                                        <Button variant="outline" size="sm" onClick={() => handleGeneratePlan(assignment.id)}>Generate Plan</Button>
+                                                        <span>Start: {t.start_at ? new Date(t.start_at).toLocaleString() : 'Not scheduled'}</span>
+                                                        <span>Due: {t.end_at ? new Date(t.end_at).toLocaleString() : 'Not set'}</span>
                                                     </div>
                                                 </DropdownMenuItem>
                                             ))
@@ -827,7 +815,7 @@ export default function AssignmentsPage() {
                                             sorted.map((assignment, idx) => (
                                                 <DropdownMenuItem key={`${assignment.id}-${idx}`} className="flex flex-col items-start space-y-2">
                                                     <div className="flex w-full items-center justify-between">
-                                                        <span className="font-medium text-base">{assignment.title}</span>
+                                                        <span className="font-medium text-base">{toTitleCase(assignment.title)}</span>
                                                         <Badge variant={assignment.importance_level === 'high' || assignment.importance_level === 'critical' ? 'destructive' : assignment.importance_level === 'medium' ? 'default' : 'secondary'}>
                                                             {assignment.importance_level}
                                                         </Badge>

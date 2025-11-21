@@ -11,7 +11,7 @@ interface Assignment {
 }
 
 export function InsightsCard({ tasks }: { tasks: Assignment[] }) {
-    const [loginAt, setLoginAt] = useState<number>(() => {
+    const [loginAt] = useState<number>(() => {
         const stored = typeof window !== "undefined" ? window.localStorage.getItem("loginAt") : null
         return stored ? parseInt(stored) : Date.now()
     })

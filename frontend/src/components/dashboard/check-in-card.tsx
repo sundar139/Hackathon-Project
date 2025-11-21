@@ -9,8 +9,8 @@ export function CheckInCard() {
 
     return (
         <div className="bg-white rounded-2xl p-6 shadow-sm h-full flex flex-col items-center justify-center">
-            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
-                <Smile className="h-8 w-8 text-green-600" />
+            <div className="w-16 h-16 rounded-full bg-rose-100 flex items-center justify-center mb-4">
+                <Smile className="h-8 w-8 text-rose-600" />
             </div>
 
             <h3 className="text-lg font-semibold text-gray-900 mb-2">How are you feeling?</h3>
@@ -20,7 +20,7 @@ export function CheckInCard() {
 
             <Button
                 onClick={() => router.push("/wellbeing")}
-                className="w-full bg-green-500 hover:bg-green-600 text-white"
+                className="w-full bg-rose-500 hover:bg-rose-600 text-white"
             >
                 Check-In Now
             </Button>

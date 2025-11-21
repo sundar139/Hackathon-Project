@@ -19,16 +19,16 @@ class Settings(BaseSettings):
     # Auth
     SECRET_KEY: str = "YOUR_SECRET_KEY" # TODO: Change in production
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     
     
     # CORS
-    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3001"]
     
     # AI / LLM Configuration
     OPENAI_API_KEY: Union[str, None] = None  # Set this in .env to enable real AI features
     OPENAI_MODEL: str = "gpt-4o-mini"  # Can be changed to gpt-4, gpt-3.5-turbo, etc.
-    OPENAI_FAST_MODEL: str = "gpt-3.5-turbo"  # Faster, lower-cost model for chat
+    OPENAI_FAST_MODEL: str = "gpt-4o-mini"  # Faster, lower-cost model for chat
 
     class Config:
         case_sensitive = True

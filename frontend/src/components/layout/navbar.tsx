@@ -17,13 +17,7 @@ export function Navbar() {
     const pathname = usePathname()
     const router = useRouter()
     const [open, setOpen] = useState(false)
-    const [items, setItems] = useState<Array<{ id: string; title: string; body: string; ts: number; read: boolean }>>(() => {
-        try {
-            const raw = typeof window !== 'undefined' ? window.localStorage.getItem('assignwell.notifications') : null
-            const arr = raw ? (JSON.parse(raw) as Array<{ id: string; title: string; body: string; ts: number; read: boolean }>) : []
-            return arr.sort((a, b) => b.ts - a.ts)
-        } catch { return [] }
-    })
+    const [items, setItems] = useState<Array<{ id: string; title: string; body: string; ts: number; read: boolean }>>([])
 
     const readItems = () => {
         try {
@@ -48,7 +42,11 @@ export function Navbar() {
     useEffect(() => {
         const handler = () => setItems(readItems())
         window.addEventListener('assignwell.notification', handler as EventListener)
-        return () => window.removeEventListener('assignwell.notification', handler as EventListener)
+        const init = window.setTimeout(handler, 0)
+        return () => {
+            window.removeEventListener('assignwell.notification', handler as EventListener)
+            window.clearTimeout(init)
+        }
     }, [])
 
     const navLinks = [
@@ -95,18 +93,8 @@ export function Navbar() {
                     </div>
                 </div>
 
-                {/* Right: Settings, Notifications, User Avatar */}
+                {/* Right: Notifications, User Avatar */}
                 <div className="flex items-center gap-3">
-                    {/* Settings */}
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => router.push("/settings")}
-                        className="h-9 w-9 text-gray-600 hover:text-gray-900"
-                    >
-                        <Settings className="h-5 w-5" />
-                    </Button>
-
                     {/* Notifications */}
                     <DropdownMenu open={open} onOpenChange={setOpen}>
                         <DropdownMenuTrigger asChild>
@@ -156,13 +144,10 @@ export function Navbar() {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48 z-[60]">
+                            <DropdownMenuItem onClick={() => router.push("/profile")}>Profile Details</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => router.push("/peer-support")}>Peer Support</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => router.push("/settings")}>
-                                Profile Settings
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={handleLogout}>
-                                Logout
-                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => router.push("/settings")}>Settings</DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleLogout}>Logout</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>

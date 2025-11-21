@@ -73,9 +73,9 @@ export function InsightsCard({ tasks }: { tasks: Assignment[] }) {
 
                 <div className="bg-gray-50 rounded-xl p-3">
                     <p className="text-xs text-gray-600 mb-1">Focus Time</p>
-                    <p className="text-2xl font-bold text-blue-600">{focusHours}<span className="text-sm"> hrs</span>{focusMinutes > 0 ? ` ${focusMinutes}m` : ""}</p>
+                    <p className="text-2xl font-bold text-rose-600">{focusHours}<span className="text-sm"> hrs</span>{focusMinutes > 0 ? ` ${focusMinutes}m` : ""}</p>
                     <div className="mt-2 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-500" style={{ width: `${focusPct}%` }}></div>
+                        <div className="h-full bg-rose-500" style={{ width: `${focusPct}%` }}></div>
                     </div>
                 </div>
             </div>

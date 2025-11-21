@@ -9,7 +9,7 @@ const api = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
-    timeout: 10000,
+    timeout: 20000,
 });
 
 // Request interceptor to add token
@@ -28,7 +28,9 @@ api.interceptors.request.use(
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
-        if (!error.response && (error.message === 'Network Error' || error.code === 'ERR_NETWORK')) {
+        const isTimeout = error?.code === 'ECONNABORTED' || (typeof error?.message === 'string' && error.message.includes('timeout'))
+        const isNetwork = !error.response && (error.message === 'Network Error' || error.code === 'ERR_NETWORK')
+        if (isTimeout || isNetwork) {
             const tried = api.defaults.baseURL
             const candidates = [
                 defaultBase,

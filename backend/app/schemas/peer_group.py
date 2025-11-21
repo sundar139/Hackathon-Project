@@ -26,6 +26,7 @@ class PeerGroupInDBBase(PeerGroupBase):
 # Additional properties to return via API
 class PeerGroup(PeerGroupInDBBase):
     member_count: Optional[int] = 0
+    is_member: Optional[bool] = False
 
 class GroupMemberBase(BaseModel):
     user_id: int

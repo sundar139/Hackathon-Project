@@ -13,6 +13,7 @@ import { Activity } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { DateTimePicker } from "@/components/ui/date-time-picker"
 
 type AdditionalMetrics = {
   focus_level: number
@@ -702,11 +703,11 @@ export default function WellBeingPage() {
                 {/* Insights Column */}
                 <div className="col-span-4 space-y-4">
                     {/* AI Insight Card */}
-                    <Card className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border-indigo-500/20">
+                    <Card className="bg-gradient-to-r from-rose-500/10 to-orange-500/10 border-rose-500/20">
                         <CardHeader className="pb-2">
                             <div className="flex items-center space-x-2">
-                                <Activity className="h-5 w-5 text-indigo-500" />
-                                <CardTitle className="text-lg text-indigo-700 dark:text-indigo-300">AI Wellness Insight</CardTitle>
+                                <Activity className="h-5 w-5 text-rose-500" />
+                                <CardTitle className="text-lg text-rose-700 dark:text-rose-300">AI Wellness Insight</CardTitle>
                             </div>
                         </CardHeader>
                         <CardContent>
@@ -911,11 +912,10 @@ export default function WellBeingPage() {
                 <div className="space-y-3">
                   <div className="text-sm">{applyItem?.title}</div>
                   <div className="flex items-center gap-3">
-                    <input
-                      type="datetime-local"
-                      className="border rounded-md px-2 py-1 text-sm"
+                    <DateTimePicker
                       value={applyStart ? new Date(applyStart.getTime() - (new Date().getTimezoneOffset()*60000)).toISOString().slice(0,16) : ""}
-                      onChange={(e) => setApplyStart(new Date(e.target.value))}
+                      onChange={(v) => setApplyStart(new Date(v))}
+                      className="min-w-[200px]"
                     />
                     <input
                       type="number"

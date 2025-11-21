@@ -23,15 +23,6 @@ interface Assignment {
   subtasks?: Array<{ id: number }>
 }
 
-interface ScheduleBlock {
-  id: number
-  title: string
-  start_at: string
-  end_at: string
-  type: string
-  status: string
-  source: string
-}
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -39,7 +30,6 @@ export default function DashboardPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [scheduleBlocks, setScheduleBlocks] = useState<Array<{ id: number; title: string; start_at: string; end_at: string; type?: string; assignment_id?: number; importance_level?: string }>>([])
   const [courses, setCourses] = useState<Array<{ id: number; name: string; code?: string }>>([])
-  const [scheduleBlocks, setScheduleBlocks] = useState<ScheduleBlock[]>([])
   const [selectedDate, setSelectedDate] = useState<Date>(new Date()) // Today by default
   const [userName, setUserName] = useState("Student")
   const [greeting, setGreeting] = useState("Good Morning")
@@ -58,21 +48,15 @@ export default function DashboardPage() {
     } catch (error) {
       const status = (error as unknown as { response?: { status?: number } })?.response?.status
       if (status === 401) return
-    } catch (error: any) {
-      // 401 errors are handled by the API interceptor (logout + redirect)
-      if (error.response?.status === 401) {
-        return
-      }
       console.error("Failed to fetch assignments", error)
     }
   }, [])
 
-  interface ScheduleBlock { id: number; title: string; start_at: string; end_at: string; type?: string; assignment_id?: number; importance_level?: string }
   const fetchScheduleBlocks = useCallback(async () => {
     try {
       const response = await api.get("/schedule/")
-      const items = Array.isArray(response.data) ? (response.data as ScheduleBlock[]) : []
-      setScheduleBlocks(items.filter((b: ScheduleBlock) => b && (b.type || '').toUpperCase() === 'STUDY'))
+      const items = Array.isArray(response.data) ? response.data as Array<{ id: number; title: string; start_at: string; end_at: string; type?: string; assignment_id?: number; importance_level?: string }> : []
+      setScheduleBlocks(items.filter((b) => b && (b.type || '').toUpperCase() === 'STUDY'))
     } catch (error) {
       const status = (error as unknown as { response?: { status?: number } })?.response?.status
       if (status === 401) return
@@ -92,20 +76,6 @@ export default function DashboardPage() {
   }, [])
 
   const fetchUserName = useCallback(async () => {
-  const fetchScheduleBlocks = async () => {
-    try {
-      const response = await api.get("/schedule/", { params: { limit: 1000 } })
-      setScheduleBlocks(response.data || [])
-    } catch (error: any) {
-      // 401 errors are handled by the API interceptor (logout + redirect)
-      if (error.response?.status === 401) {
-        return
-      }
-      console.error("Failed to fetch schedule blocks", error)
-    }
-  }
-
-  const fetchUserName = async () => {
     try {
       const response = await api.get("/users/me")
       if (response.data?.full_name) {
@@ -114,12 +84,6 @@ export default function DashboardPage() {
       }
     } catch {
       // Silently ignore, e.g. on 401
-    } catch (error: any) {
-      // 401 errors are handled by the API interceptor (logout + redirect)
-      if (error.response?.status === 401) {
-        return
-      }
-      console.log("Using default name")
     }
   }, [])
 
@@ -227,22 +191,6 @@ export default function DashboardPage() {
     const handleBreakStarted = () => { fetchAssignments(); fetchScheduleBlocks(); fetchCourses() }
     const handleAssignmentUpdated = () => { fetchAssignments(); fetchScheduleBlocks(); fetchCourses() }
     const handleAssignmentAdded = () => { fetchAssignments(); fetchScheduleBlocks(); fetchCourses() }
-    const handleBreakComplete = () => {
-      fetchAssignments()
-      fetchScheduleBlocks()
-    }
-    const handleBreakStarted = () => {
-      fetchAssignments()
-      fetchScheduleBlocks()
-    }
-    const handleAssignmentUpdated = () => {
-      fetchAssignments()
-      fetchScheduleBlocks()
-    }
-    const handleAssignmentAdded = () => {
-      fetchAssignments()
-      fetchScheduleBlocks()
-    }
     const handleScheduleUpdated = () => {
       fetchScheduleBlocks()
     }
@@ -292,8 +240,6 @@ export default function DashboardPage() {
             date={selectedDate}
             blocks={scheduleBlocks}
             assignments={assignments}
-            tasks={assignments}
-            scheduleBlocks={scheduleBlocks}
           />
         </div>
 

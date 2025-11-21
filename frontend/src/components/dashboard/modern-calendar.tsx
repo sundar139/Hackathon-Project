@@ -147,8 +147,8 @@ export function ModernCalendar({ tasks, selectedDate, onDateSelect, onTaskAdded 
                                 onClick={() => handleDateClick(day)}
                                 className={cn(
                                     "w-full h-full min-h-0 rounded-sm flex items-center justify-center text-[10px] font-medium transition-all hover:bg-gray-100 p-0",
-                                    isSelectedDate && "bg-blue-500 text-white hover:bg-blue-600 ring-1 ring-blue-300",
-                                    !isSelectedDate && isTodayDate && "bg-blue-100 text-blue-600",
+                                    isSelectedDate && "bg-rose-500 text-white hover:bg-rose-600 ring-1 ring-rose-300",
+                                    !isSelectedDate && isTodayDate && "bg-orange-100 text-orange-600",
                                     !isSelectedDate && !isTodayDate && dayTasks.length > 0 && "bg-gray-100"
                                 )}
                             >

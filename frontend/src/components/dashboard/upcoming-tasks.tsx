@@ -75,7 +75,7 @@ export function UpcomingTasks({ tasks, selectedDate, assignmentsIndex, coursesIn
   const getPriorityColor = (level: string) => {
     switch (level?.toLowerCase()) {
       case 'high': return 'bg-orange-100 text-orange-700 border-orange-200'
-      case 'medium': return 'bg-blue-100 text-blue-700 border-blue-200'
+      case 'medium': return 'bg-orange-100 text-orange-700 border-orange-200'
       case 'low': return 'bg-green-100 text-green-700 border-green-200'
       default: return 'bg-gray-100 text-gray-700 border-gray-200'
     }
@@ -159,7 +159,7 @@ export function UpcomingTasks({ tasks, selectedDate, assignmentsIndex, coursesIn
                 </h3>
                 <div className="flex items-center gap-2 mt-1">
                   {(assignmentName || courseLabel) && (
-                    <span className="text-xs px-2 py-0.5 rounded-full border bg-blue-100 text-blue-700 border-blue-200">
+                    <span className="text-xs px-2 py-0.5 rounded-full border bg-rose-100 text-rose-700 border-rose-200">
                       {toTitleCase(assignmentName || '')}{courseLabel ? ` • ${courseLabel}` : ''}
                     </span>
                   )}

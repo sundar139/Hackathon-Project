@@ -17,10 +17,10 @@ import {
 import api from "@/lib/api"
 
 const breaks = [
-    { id: 1, name: "Breathe", icon: Wind, color: "text-blue-500", defaultMinutes: 1, allowCustom: true },
+    { id: 1, name: "Breathe", icon: Wind, color: "text-rose-500", defaultMinutes: 1, allowCustom: true },
     { id: 2, name: "Focus", icon: Timer, color: "text-green-500", defaultMinutes: 20, allowCustom: true },
     { id: 3, name: "Hydrate", icon: Droplet, color: "text-yellow-500", defaultMinutes: 0, allowCustom: false },
-    { id: 4, name: "Walk", icon: Footprints, color: "text-purple-500", defaultMinutes: 0, allowCustom: true },
+    { id: 4, name: "Walk", icon: Footprints, color: "text-orange-500", defaultMinutes: 0, allowCustom: true },
 ]
 
 export function QuickBreaks() {
@@ -257,12 +257,12 @@ export function QuickBreaks() {
                     </DialogHeader>
 
                     <div className="flex flex-col items-center justify-center py-8">
-                        <div className="text-6xl font-bold text-blue-600 mb-4">
+                        <div className="text-6xl font-bold text-rose-600 mb-4">
                             {formatTime(timeRemaining)}
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
                             <div
-                                className="bg-blue-500 h-2 rounded-full transition-all duration-1000"
+                                className="bg-rose-500 h-2 rounded-full transition-all duration-1000"
                                 style={{
                                     width: (() => {
                                         const parsed = parseInt(customMinutes, 10)

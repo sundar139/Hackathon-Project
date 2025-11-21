@@ -1,14 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useAuthStore } from "@/store/auth"
-import { Plus, Search, Filter, Download } from "lucide-react"
+import { Plus, Search, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -28,7 +27,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { DateTimePicker } from "@/components/ui/date-time-picker"
 import api from "@/lib/api"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 interface Assignment {
     id: number
@@ -49,6 +50,7 @@ export default function AssignmentsPage() {
     const token = useAuthStore(state => state.token)
     const [assignments, setAssignments] = useState<Assignment[]>([])
     const [courses, setCourses] = useState<Array<{ id: number; name: string; code?: string }>>([])
+    const [scheduleBlocks, setScheduleBlocks] = useState<Array<{ id: number; title: string; start_at: string; end_at: string; type?: string; assignment_id?: number; importance_level?: string }>>([])
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [newAssignment, setNewAssignment] = useState({
         title: "",
@@ -61,25 +63,32 @@ export default function AssignmentsPage() {
         importance_level: "medium"
     })
     const [newAssignmentCourseText, setNewAssignmentCourseText] = useState<string>("")
-    const [importText, setImportText] = useState("")
-    const [importFileName, setImportFileName] = useState("")
-    const [plannerTitle, setPlannerTitle] = useState("")
-    const [plannerDeadline, setPlannerDeadline] = useState("")
-    const [plannerCourseText, setPlannerCourseText] = useState<string>("")
-    const [hoursPerDay, setHoursPerDay] = useState<number>(2)
-    const [allowWeekends, setAllowWeekends] = useState<boolean>(true)
-    const [plannedSubtasks, setPlannedSubtasks] = useState<Array<{ id: number; title: string; estimated_minutes: number; order_index?: number; start_at?: string; end_at?: string }>>([])
-    const [isPlanning, setIsPlanning] = useState(false)
-    const [isExtracting, setIsExtracting] = useState(false)
-    const [suggestionOpen, setSuggestionOpen] = useState(false)
-    const [suggestedHoursPerDay, setSuggestedHoursPerDay] = useState<number | null>(null)
-    const [workSummary, setWorkSummary] = useState<{ totalHours: number; daysAvailable: number } | null>(null)
-    const [plannerAssignmentId, setPlannerAssignmentId] = useState<number | null>(null)
-    const [plannerAssignmentTitle, setPlannerAssignmentTitle] = useState<string>("")
+    
     const [allTasksQuery, setAllTasksQuery] = useState<string>("")
     const [allAssignmentsQuery, setAllAssignmentsQuery] = useState<string>("")
     const [assignmentsSortBy, setAssignmentsSortBy] = useState<"due" | "importance">("due")
     const [assignmentsCourseFilter, setAssignmentsCourseFilter] = useState<string>("")
+    const [hoursPerDay, setHoursPerDay] = useState<number>(2)
+    const [hoursPerDayInput, setHoursPerDayInput] = useState<string>("2")
+    const [hoursPerDayError, setHoursPerDayError] = useState<string | null>(null)
+    const [allowWeekends, setAllowWeekends] = useState<boolean>(true)
+    const [isPlanning, setIsPlanning] = useState<boolean>(false)
+    const [importText, setImportText] = useState("")
+    const [rawImportText, setRawImportText] = useState("")
+    const [importFileName, setImportFileName] = useState("")
+    const [plannerAssignmentId, setPlannerAssignmentId] = useState<number | null>(null)
+    const [plannerAssignmentTitle, setPlannerAssignmentTitle] = useState<string>("")
+    const [divideMode, setDivideMode] = useState<"subtasks" | "one">("subtasks")
+    const [scheduleMode, setScheduleMode] = useState<"ai" | "manual">("ai")
+    const [plannedSubtasks, setPlannedSubtasks] = useState<Array<{ id: number; title: string; estimated_minutes: number; start_at?: string; end_at?: string }>>([])
+    const [suggestedTimes, setSuggestedTimes] = useState<Array<{ start_at: string; end_at: string }>>([])
+    const [planningStep, setPlanningStep] = useState<'none' | 'choices' | 'subtasks' | 'one'>('none')
+    const [editingSubtaskIds, setEditingSubtaskIds] = useState<number[]>([])
+    const [isOneGoEditing, setIsOneGoEditing] = useState<boolean>(false)
+    const [oneGoSuggestion, setOneGoSuggestion] = useState<{ start_at: string; end_at: string; duration_min: number } | null>(null)
+    
+    const [singleManualStart, setSingleManualStart] = useState<string>("")
+    const [singleManualEnd, setSingleManualEnd] = useState<string>("")
     const toTitleCase = (s: string | undefined | null) => {
         const t = String(s || "").toLowerCase()
         return t.replace(/\b\w+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1))
@@ -106,6 +115,8 @@ export default function AssignmentsPage() {
         a.click()
         URL.revokeObjectURL(url)
     }
+
+    
     const courseLabel = (id?: number) => {
         if (!id) return "N/A"
         const c = courses.find(x => x.id === id)
@@ -155,7 +166,460 @@ export default function AssignmentsPage() {
         })
         return sorted
     }
+
+    const handleImportFile = async (file: File | null) => {
+        try {
+            if (!file) return
+            setImportFileName(file.name)
+            const name = file.name.toLowerCase()
+            const type = (file.type || "").toLowerCase()
+            if (type.startsWith("text/") || name.endsWith(".md") || name.endsWith(".txt")) {
+                const text = await file.text()
+                setRawImportText(text)
+                return
+            }
+            if (name.endsWith(".docx") || type.includes("openxmlformats-officedocument.wordprocessingml.document")) {
+                try {
+                    const { default: mammoth } = await import("mammoth")
+                    const buffer = await file.arrayBuffer()
+                    const result = await mammoth.extractRawText({ arrayBuffer: buffer })
+                    const text = String(result?.value || "").replace(/\s+/g, " ").trim()
+                    setRawImportText(text)
+                    return
+                } catch {
+                    const text = await file.text().catch(() => "")
+                    setRawImportText(text || "")
+                    return
+                }
+            }
+            if (name.endsWith(".pdf") || type.includes("pdf")) {
+                try {
+                    const pdfjsLib = await import("pdfjs-dist")
+                    // @ts-expect-error: worker provided by Next.js build
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = undefined
+                    const buffer = await file.arrayBuffer()
+                    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
+                    let full = ""
+                    const getStr = (it: unknown): string => {
+                        const obj = it as { str?: unknown }
+                        return typeof obj.str === "string" ? obj.str : ""
+                    }
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i)
+                        const content = await page.getTextContent()
+                        const strings = (Array.isArray(content?.items) ? content.items : [])
+                            .map(getStr)
+                            .filter((s) => s !== "")
+                        full += strings.join(" ") + "\n"
+                    }
+                    const text = full.replace(/\s+/g, " ").trim()
+                    setRawImportText(text)
+                    return
+                } catch {
+                    const text = await file.text().catch(() => "")
+                    setRawImportText(text || "")
+                    return
+                }
+            }
+            const fallback = await file.text().catch(() => "")
+            setRawImportText(fallback || "")
+        } catch {}
+    }
+
+    const summarizeAssignment = async () => {
+        try {
+            setIsPlanning(true)
+            const source = rawImportText || importText
+            if (!source || source.trim().length < 1) {
+                alert("Please upload or explain the assignment details first")
+                return
+            }
+            const res = await api.post("/ai/extract-assignment-text", { text: source })
+            const data = res?.data as { clean_text?: string; suggested_title?: string }
+            if (data?.clean_text) {
+                setImportText(data.clean_text)
+            } else {
+                setImportText(source)
+            }
+            if (data?.suggested_title && !newAssignment.title) setNewAssignment({ ...newAssignment, title: data.suggested_title })
+        } catch (e) {
+            console.error("Summarization failed", e)
+            alert("Failed to summarize. Please try again.")
+        } finally {
+            setIsPlanning(false)
+        }
+    }
+
+    const generateTimeChoices = async (durationMin: number, count: number) => {
+        try {
+            const res = await api.get("/schedule/")
+            const existing: Array<{ start_at: string; end_at: string }> = res?.data || []
+            const byDay = new Map<string, Array<{ start: Date; end: Date }>>()
+            for (const b of existing) {
+                const s = new Date(b.start_at)
+                const e = new Date(b.end_at)
+                const key = s.toDateString()
+                const arr = byDay.get(key) || []
+                arr.push({ start: s, end: e })
+                byDay.set(key, arr)
+            }
+            const startHour = 9
+            const suggestions: Array<{ start_at: string; end_at: string }> = []
+            let cursor = new Date()
+            cursor.setHours(startHour, 0, 0, 0)
+            const isWeekend = (d: Date) => d.getDay() === 0 || d.getDay() === 6
+            while (suggestions.length < count) {
+                if (!allowWeekends && isWeekend(cursor)) {
+                    cursor.setDate(cursor.getDate() + 1)
+                    cursor.setHours(startHour, 0, 0, 0)
+                    continue
+                }
+                const dayKey = cursor.toDateString()
+                const occupied = (byDay.get(dayKey) || []).slice().sort((a, b) => a.start.getTime() - b.start.getTime())
+                let start = new Date(cursor)
+                for (const block of occupied) {
+                    if (start < block.end && start >= block.start) {
+                        start = new Date(block.end.getTime() + 15 * 60 * 1000)
+                    }
+                }
+                const end = new Date(start.getTime() + durationMin * 60 * 1000)
+                const overlaps = occupied.some(o => start < o.end && end > o.start)
+                if (!overlaps) suggestions.push({ start_at: start.toISOString(), end_at: end.toISOString() })
+                cursor = new Date(cursor.getTime() + 90 * 60 * 1000)
+                if (cursor.getHours() > 18) {
+                    cursor.setDate(cursor.getDate() + 1)
+                    cursor.setHours(startHour, 0, 0, 0)
+                }
+            }
+            setSuggestedTimes(suggestions)
+        } catch {
+            setSuggestedTimes([])
+        }
+    }
+    const computeTimeChoices = async (durationMin: number, count: number): Promise<Array<{ start_at: string; end_at: string }>> => {
+        try {
+            const res = await api.get("/schedule/")
+            const existing: Array<{ start_at: string; end_at: string }> = res?.data || []
+            const byDay = new Map<string, Array<{ start: Date; end: Date }>>()
+            for (const b of existing) {
+                const s = new Date(b.start_at)
+                const e = new Date(b.end_at)
+                const key = s.toDateString()
+                const arr = byDay.get(key) || []
+                arr.push({ start: s, end: e })
+                byDay.set(key, arr)
+            }
+            const startHour = 9
+            const suggestions: Array<{ start_at: string; end_at: string }> = []
+            let cursor = new Date()
+            cursor.setHours(startHour, 0, 0, 0)
+            const isWeekend = (d: Date) => d.getDay() === 0 || d.getDay() === 6
+            while (suggestions.length < count) {
+                if (!allowWeekends && isWeekend(cursor)) {
+                    cursor.setDate(cursor.getDate() + 1)
+                    cursor.setHours(startHour, 0, 0, 0)
+                    continue
+                }
+                const dayKey = cursor.toDateString()
+                const occupied = (byDay.get(dayKey) || []).slice().sort((a, b) => a.start.getTime() - b.start.getTime())
+                let start = new Date(cursor)
+                for (const block of occupied) {
+                    if (start < block.end && start >= block.start) {
+                        start = new Date(block.end.getTime() + 15 * 60 * 1000)
+                    }
+                }
+                const end = new Date(start.getTime() + durationMin * 60 * 1000)
+                const overlaps = occupied.some(o => start < o.end && end > o.start)
+                if (!overlaps) suggestions.push({ start_at: start.toISOString(), end_at: end.toISOString() })
+                cursor = new Date(cursor.getTime() + 90 * 60 * 1000)
+                if (cursor.getHours() > 18) {
+                    cursor.setDate(cursor.getDate() + 1)
+                    cursor.setHours(startHour, 0, 0, 0)
+                }
+            }
+            return suggestions
+        } catch {
+            return []
+        }
+    }
+
+    const getPlanTimeoutMs = () => {
+        const v = parseInt(String(process.env.NEXT_PUBLIC_PLAN_TIMEOUT_MS || ''), 10)
+        return Number.isFinite(v) && v > 0 ? v : 45000
+    }
+    const isTimeoutError = (e: unknown): boolean => {
+        const err = e as { code?: string; message?: string }
+        const code = String(err?.code || '').toUpperCase()
+        const msg = String(err?.message || '')
+        return code === 'ECONNABORTED' || /timeout/i.test(msg)
+    }
+    const fetchPlanWithRetry = async (assignmentId: number, tries = 2): Promise<Array<{ id?: number; title: string; estimated_minutes: number }>> => {
+        const timeout = getPlanTimeoutMs()
+        let lastErr: unknown = null
+        for (let i = 0; i < Math.max(1, tries); i++) {
+            try {
+                const planRes = await api.post(`/assignments/${assignmentId}/plan`, {}, { timeout })
+                return (planRes?.data as Array<{ id?: number; title: string; estimated_minutes: number }>) || []
+            } catch (e) {
+                lastErr = e
+                if (!isTimeoutError(e)) break
+                const backoff = 1500 * (i + 1)
+                await new Promise(res => setTimeout(res, backoff))
+                continue
+            }
+        }
+        throw lastErr || new Error('Plan request failed')
+    }
+
+    const handleGeneratePlan = async () => {
+        try {
+            setIsPlanning(true)
+            setPlannerAssignmentId(null)
+            setPlannerAssignmentTitle(newAssignment.title || (importFileName ? importFileName.replace(/\.[^/.]+$/, "") : "Untitled Assignment"))
+            const hasDetails = !!(importText && importText.trim().length > 0)
+            if (!hasDetails) {
+                let totalMin = 60
+                try {
+                    const source = (importText || rawImportText || '').trim()
+                    const lines = source ? source.split(/\n+/).map(s => s.trim()).filter(Boolean) : []
+                    const count = Math.max(1, Math.min(8, lines.length || 2))
+                    totalMin = Math.max(30, count * 30)
+                } catch {}
+                const suggestions = await computeTimeChoices(totalMin, 1)
+                const chosen = suggestions[0] || null
+                setOneGoSuggestion(chosen ? { start_at: chosen.start_at, end_at: chosen.end_at, duration_min: totalMin } : null)
+                setPlanningStep('one')
+                setIsOneGoEditing(false)
+            } else {
+                setPlanningStep('choices')
+                setEditingSubtaskIds([])
+                setIsOneGoEditing(false)
+                setOneGoSuggestion(null)
+            }
+        } catch (e) {
+            console.error("Failed to generate plan", e)
+            alert("Failed to generate plan. Please try again.")
+        } finally {
+            setIsPlanning(false)
+        }
+    }
+
+    const handleConfirmSingleBlock = async (when: { start_at: string; end_at: string } | null) => {
+        try {
+            if (!plannerAssignmentId) return
+            const title = plannerAssignmentTitle || newAssignment.title || "Study"
+            const payload = {
+                start_at: when ? when.start_at : singleManualStart,
+                end_at: when ? when.end_at : singleManualEnd,
+                type: "STUDY",
+                status: "PLANNED",
+                title: toTitleCase(title),
+                assignment_id: plannerAssignmentId,
+                source: "AI_SUGGESTED",
+            }
+            await api.post("/schedule/", payload)
+            window.dispatchEvent(new CustomEvent('assignmentUpdated'))
+            setIsAddDialogOpen(false)
+            fetchAssignments(); fetchScheduleBlocks()
+            setImportText("")
+            setImportFileName("")
+        } catch (e) {
+            console.error("Failed to schedule", e)
+            alert("Failed to schedule. Please try again.")
+        }
+    }
+
+    const handleChooseDivideSubtasks = async () => {
+        const normalizeTitle = (t: string) => {
+            const lower = String(t || '').toLowerCase()
+            const cleaned = lower.replace(/[^a-z0-9\s]/g, ' ')
+            return cleaned.replace(/\s+/g, ' ').trim()
+        }
+        try {
+            setIsPlanning(true)
+            let raw: Array<{ id?: number; title: string; estimated_minutes: number }> = []
+            if (plannerAssignmentId) {
+                raw = await fetchPlanWithRetry(plannerAssignmentId, 2)
+            } else {
+                const source = (importText || rawImportText || '').trim()
+                const lines = source ? source.split(/\n+/).map(s => s.trim()).filter(Boolean) : []
+                const baseItems = (lines.length > 0 ? lines : ['Read requirements', 'Outline solution', 'Draft', 'Revise', 'Finalize']).slice(0, 8)
+                raw = baseItems.map((t, i) => ({ id: i + 1, title: t || `Task ${i + 1}`, estimated_minutes: 30 }))
+            }
+            const grouped = raw.reduce((acc, cur, idx) => {
+                const rawTitle = String(cur.title || `Task ${idx + 1}`).trim()
+                const key = normalizeTitle(rawTitle)
+                const title = rawTitle
+                const prev = acc.get(key)
+                const minutes = Math.max(15, Math.round(cur.estimated_minutes || 30))
+                if (prev) {
+                    prev.estimated_minutes += minutes
+                } else {
+                    acc.set(key, { title, estimated_minutes: minutes })
+                }
+                return acc
+            }, new Map<string, { title: string; estimated_minutes: number }>())
+            const deduped = Array.from(grouped.values()).map((s, i) => ({ id: i + 1, title: s.title, estimated_minutes: s.estimated_minutes }))
+            setPlannedSubtasks(deduped)
+            setPlanningStep('subtasks')
+            setEditingSubtaskIds([])
+            await handleAutoScheduleSubtasks()
+        } catch (e) {
+            if (isTimeoutError(e)) {
+                const source = (importText || rawImportText || '').trim()
+                const lines = source ? source.split(/\n+/).map(s => s.trim()).filter(Boolean) : []
+                const baseItems = (lines.length > 0 ? lines : ['Read requirements', 'Outline solution', 'Draft', 'Revise', 'Finalize']).slice(0, 8)
+                const acc = new Map<string, { title: string; estimated_minutes: number }>()
+                baseItems.forEach((t, i) => {
+                    const key = normalizeTitle(t || `Task ${i + 1}`)
+                    const title = t || `Task ${i + 1}`
+                    const prev = acc.get(key)
+                    if (prev) prev.estimated_minutes += 30; else acc.set(key, { title, estimated_minutes: 30 })
+                })
+                const fallback = Array.from(acc.values()).map((s, i) => ({ id: i + 1, title: s.title, estimated_minutes: s.estimated_minutes }))
+                setPlannedSubtasks(fallback)
+                setPlanningStep('subtasks')
+                setEditingSubtaskIds([])
+                await handleAutoScheduleSubtasks()
+                return
+            }
+            console.error('Failed to divide into subtasks', e)
+            alert('Failed to divide into subtasks. Please try again.')
+        } finally {
+            setIsPlanning(false)
+        }
+    }
+
+    const handleChooseOneGo = async () => {
+        try {
+            setIsPlanning(true)
+            let totalMin = 60
+            try {
+                if (plannerAssignmentId) {
+                    const raw = await fetchPlanWithRetry(plannerAssignmentId, 2)
+                    const sum = raw.reduce((a, b) => a + Math.max(15, Math.round(b.estimated_minutes || 30)), 0)
+                    totalMin = Math.max(30, sum || totalMin)
+                } else {
+                    const source = (importText || rawImportText || '').trim()
+                    const lines = source ? source.split(/\n+/).map(s => s.trim()).filter(Boolean) : []
+                    const count = Math.max(1, Math.min(8, lines.length || 2))
+                    totalMin = Math.max(30, count * 30)
+                }
+            } catch {}
+            const suggestions = await computeTimeChoices(totalMin, 1)
+            const chosen = suggestions[0] || null
+            setOneGoSuggestion(chosen ? { start_at: chosen.start_at, end_at: chosen.end_at, duration_min: totalMin } : null)
+            setPlanningStep('one')
+            setIsOneGoEditing(false)
+        } catch (e) {
+            console.error('Failed to plan one go', e)
+            alert('Failed to plan in one go. Please try again.')
+        } finally {
+            setIsPlanning(false)
+        }
+    }
+
+    const handleAutoScheduleSubtasks = useCallback(async () => {
+        try {
+            setIsPlanning(true)
+            const moodRes = await api.get("/mood/", { params: { limit: 1 }, timeout: 10000 })
+            type MoodItem = { additional_metrics?: { burnout_indicator?: string } }
+            const latestMood: MoodItem | null = (Array.isArray(moodRes?.data) && moodRes.data.length > 0) ? (moodRes.data[0] as MoodItem) : null
+            const burnout = latestMood?.additional_metrics?.burnout_indicator
+            const burnoutHeavy = burnout === "noticeable" || burnout === "a_lot"
+            const scheduleRes = await api.get("/schedule/")
+            const existing = (scheduleRes?.data as Array<{ start_at: string; end_at: string }>) || []
+            const deadline = newAssignment.due_at ? new Date(newAssignment.due_at) : new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000)
+            const baseCapacityMin = Math.max(30, Math.min(8 * 60, Math.round(hoursPerDay * 60)))
+            const dayCapacityMin = burnoutHeavy ? Math.round(baseCapacityMin * 0.7) : baseCapacityMin
+            const byDay = new Map<string, Array<{ start: Date; end: Date }>>()
+            for (const b of existing) {
+                const s = new Date(b.start_at)
+                const e = new Date(b.end_at)
+                const key = s.toDateString()
+                const arr = byDay.get(key) || []
+                arr.push({ start: s, end: e })
+                byDay.set(key, arr)
+            }
+            const startHour = 9
+            const breakMin = burnoutHeavy ? 25 : 15
+            const now = new Date()
+            let cursor = new Date(now.getFullYear(), now.getMonth(), now.getDate(), startHour, 0, 0)
+            const withinDeadline = (d: Date) => d <= deadline
+            const isWeekend = (d: Date) => { const day = d.getDay(); return day === 0 || day === 6 }
+            let dayUsedMin = 0
+            const updated = plannedSubtasks.map(p => ({ ...p }))
+            for (let i = 0; i < updated.length; i++) {
+                const s = updated[i]
+                const requiredMin = Math.max(15, Math.round(s.estimated_minutes || 30))
+                let assigned = false
+                while (!assigned) {
+                    if (!withinDeadline(cursor)) break
+                    if (!allowWeekends && isWeekend(cursor)) { const next = new Date(cursor); next.setDate(cursor.getDate() + 1); next.setHours(startHour, 0, 0, 0); cursor = next; dayUsedMin = 0; continue }
+                    const availableToday = dayCapacityMin - dayUsedMin
+                    if (availableToday < requiredMin) { const next = new Date(cursor); next.setDate(cursor.getDate() + 1); next.setHours(startHour, 0, 0, 0); cursor = next; dayUsedMin = 0; continue }
+                    const dayKey = cursor.toDateString()
+                    const occupied = (byDay.get(dayKey) || []).slice().sort((a, b) => a.start.getTime() - b.start.getTime())
+                    let start = new Date(cursor)
+                    for (const block of occupied) { if (start < block.end && (start >= block.start)) { start = new Date(block.end.getTime() + breakMin * 60 * 1000) } }
+                    const end = new Date(start.getTime() + requiredMin * 60 * 1000)
+                    const overlaps = occupied.some(o => start < o.end && end > o.start)
+                    if (overlaps) { cursor = new Date(occupied[occupied.length - 1].end.getTime() + breakMin * 60 * 1000); continue }
+                    occupied.push({ start, end })
+                    byDay.set(dayKey, occupied)
+                    updated[i] = { ...s, start_at: start.toISOString(), end_at: end.toISOString() }
+                    dayUsedMin += requiredMin
+                    cursor = new Date(end.getTime() + breakMin * 60 * 1000)
+                    assigned = true
+                }
+            }
+            setPlannedSubtasks(updated)
+        } catch (e) {
+            console.error("Failed to auto-schedule subtasks", e)
+            alert("Failed to auto-schedule. Please try again.")
+        } finally {
+            setIsPlanning(false)
+        }
+    }, [plannerAssignmentId, newAssignment.due_at, hoursPerDay, allowWeekends, plannedSubtasks])
+
+    useEffect(() => {
+        const hasSummary = !!(importText && importText.trim().length > 0)
+        const needsSuggestion = plannedSubtasks.length > 0 && plannedSubtasks.every(s => !s.start_at || !s.end_at)
+        if (plannerAssignmentId && hasSummary && divideMode === "subtasks" && scheduleMode === "ai" && needsSuggestion) {
+            handleAutoScheduleSubtasks()
+        }
+    }, [plannerAssignmentId, importText, divideMode, scheduleMode, plannedSubtasks, handleAutoScheduleSubtasks])
+
+    const handleApplySubtasksToCalendar = async () => {
+        try {
+            if (!plannerAssignmentId) return
+            for (const s of plannedSubtasks) {
+                if (!s.start_at || !s.end_at) continue
+                const payload = {
+                    start_at: s.start_at,
+                    end_at: s.end_at,
+                    type: "STUDY",
+                    status: "PLANNED",
+                    title: toTitleCase(`${plannerAssignmentTitle || newAssignment.title} - ${s.title}`),
+                    assignment_id: plannerAssignmentId,
+                    subtask_id: s.id,
+                    source: "AI_SUGGESTED",
+                }
+                await api.post("/schedule/", payload)
+            }
+            window.dispatchEvent(new CustomEvent('assignmentUpdated'))
+            setIsAddDialogOpen(false)
+            fetchAssignments(); fetchScheduleBlocks()
+            setImportText("")
+            setImportFileName("")
+            setPlannedSubtasks([])
+        } catch (e) {
+            console.error("Failed to add subtasks", e)
+            alert("Failed to add planned tasks. Please try again.")
+        }
+    }
     
+
 
     const fetchAssignments = async () => {
         try {
@@ -163,6 +627,15 @@ export default function AssignmentsPage() {
             setAssignments(response.data)
         } catch (error) {
             console.error("Failed to fetch assignments", error)
+        }
+    }
+
+    const fetchScheduleBlocks = async () => {
+        try {
+            const response = await api.get("/schedule/")
+            setScheduleBlocks(response.data || [])
+        } catch (error) {
+            console.error("Failed to fetch schedule", error)
         }
     }
 
@@ -182,10 +655,11 @@ export default function AssignmentsPage() {
         }
         const id = setTimeout(() => {
             fetchAssignments()
+            fetchScheduleBlocks()
             fetchCourses()
         }, 0)
 
-        const refresh = () => fetchAssignments()
+        const refresh = () => { fetchAssignments(); fetchScheduleBlocks() }
         window.addEventListener('assignmentAdded', refresh as EventListener)
         window.addEventListener('assignmentUpdated', refresh as EventListener)
 
@@ -195,6 +669,45 @@ export default function AssignmentsPage() {
             window.removeEventListener('assignmentUpdated', refresh as EventListener)
         }
     }, [token, router])
+
+    const resetAddDialogState = () => {
+        setNewAssignment({
+            title: "",
+            course_id: "",
+            due_at: "",
+            difficulty: "MEDIUM",
+            status: "NOT_STARTED",
+            source_type: "manual",
+            user_confidence: 3,
+            importance_level: "medium"
+        })
+        setNewAssignmentCourseText("")
+        setHoursPerDay(2)
+        setHoursPerDayInput("2")
+        setHoursPerDayError(null)
+        setAllowWeekends(true)
+        setImportText("")
+        setRawImportText("")
+        setImportFileName("")
+        setPlannerAssignmentId(null)
+        setPlannerAssignmentTitle("")
+        setPlanningStep('none')
+        setPlannedSubtasks([])
+        setSuggestedTimes([])
+        setEditingSubtaskIds([])
+        setIsOneGoEditing(false)
+        setOneGoSuggestion(null)
+        setDivideMode("subtasks")
+        setScheduleMode("ai")
+        setSingleManualStart("")
+        setSingleManualEnd("")
+        setIsPlanning(false)
+    }
+
+    const handleAddDialogOpenChange = (open: boolean) => {
+        resetAddDialogState()
+        setIsAddDialogOpen(open)
+    }
 
     const handleCreateAssignment = async () => {
         try {
@@ -220,17 +733,8 @@ export default function AssignmentsPage() {
                 importance_level: (newAssignment.importance_level || "medium").toLowerCase(),
             })
             setIsAddDialogOpen(false)
-            fetchAssignments()
-            setNewAssignment({
-                title: "",
-                course_id: "",
-                due_at: "",
-                difficulty: "MEDIUM",
-                status: "NOT_STARTED",
-                source_type: "manual",
-                user_confidence: 3,
-                importance_level: "medium"
-            })
+            fetchAssignments(); fetchScheduleBlocks()
+            resetAddDialogState()
         } catch (error) {
             console.error("Failed to create assignment", error)
         }
@@ -238,388 +742,26 @@ export default function AssignmentsPage() {
 
     
 
-    const handleImportFile = async (file: File | null) => {
-        try {
-            if (!file) return
-            setImportFileName(file.name)
-            const name = file.name.toLowerCase()
-            const type = (file.type || "").toLowerCase()
-            const setTitleIfEmpty = () => {
-                if (!plannerTitle) setPlannerTitle(file.name.replace(/\.[^/.]+$/, ""))
-            }
+    
 
-            // .txt / .md
-            if (type.startsWith("text/") || name.endsWith(".md") || name.endsWith(".txt")) {
-                const text = await file.text()
-                setImportText(text)
-                setTitleIfEmpty()
-                return
-            }
+    
 
-            // .docx via mammoth
-            if (name.endsWith(".docx") || type.includes("openxmlformats-officedocument.wordprocessingml.document")) {
-                try {
-                    const { default: mammoth } = await import("mammoth")
-                    const buffer = await file.arrayBuffer()
-                    const result = await mammoth.extractRawText({ arrayBuffer: buffer })
-                    const text = String(result?.value || "").replace(/\s+/g, " ").trim()
-                    setImportText(text)
-                    setTitleIfEmpty()
-                    return
-                } catch {
-                    const text = await file.text().catch(() => "")
-                    setImportText(text || "")
-                    setTitleIfEmpty()
-                    return
-                }
-            }
+    
 
-            // .pdf via pdfjs-dist
-            if (name.endsWith(".pdf") || type.includes("pdf")) {
-                try {
-                    const pdfjsLib = await import("pdfjs-dist")
-                    // @ts-expect-error set worker to empty; Next.js build includes default worker
-                    pdfjsLib.GlobalWorkerOptions.workerSrc = undefined
-                    const buffer = await file.arrayBuffer()
-                    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
-                    let full = ""
-                    const getStr = (it: unknown): string => {
-                        const obj = it as { str?: unknown }
-                        return typeof obj.str === "string" ? obj.str : ""
-                    }
-                    for (let i = 1; i <= pdf.numPages; i++) {
-                        const page = await pdf.getPage(i)
-                        const content = await page.getTextContent()
-                        const strings = (Array.isArray(content?.items) ? content.items : [])
-                            .map(getStr)
-                            .filter((s) => s !== "")
-                        full += strings.join(" ") + "\n"
-                    }
-                    const text = full.replace(/\s+/g, " ").trim()
-                    setImportText(text)
-                    setTitleIfEmpty()
-                    return
-                } catch {
-                    const text = await file.text().catch(() => "")
-                    setImportText(text || "")
-                    setTitleIfEmpty()
-                    return
-                }
-            }
-
-            // Fallback for unknown types
-            const fallback = await file.text().catch(() => "")
-            setImportText(fallback || "")
-            setTitleIfEmpty()
-        } catch {}
-    }
-
-    const isoWithTZ = (d: Date) => {
-        const tz = d.getTimezoneOffset()
-        const sign = tz <= 0 ? "+" : "-"
-        const abs = Math.abs(tz)
-        const offH = String(Math.floor(abs / 60)).padStart(2, "0")
-        const offM = String(abs % 60).padStart(2, "0")
-        const pad = (n: number) => String(n).padStart(2, "0")
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${sign}${offH}:${offM}`
-    }
-
-    const generatePlanner = async () => {
-        try {
-            setIsPlanning(true)
-            const title = plannerTitle || (importFileName ? importFileName.replace(/\.[^/.]+$/, "") : newAssignment.title || "Untitled Assignment")
-            const dueIso = (() => {
-                if (!plannerDeadline) return undefined
-                const d = new Date(plannerDeadline)
-                return isoWithTZ(d)
-            })()
-            const createRes = await api.post("/assignments/", {
-                title,
-                description: importText || "",
-                due_at: dueIso,
-                status: "NOT_STARTED",
-                importance_level: "medium",
-                course_id: await resolveCourseId(plannerCourseText),
-            }, { timeout: 20000 })
-            const created = createRes?.data as { id: number }
-            setPlannerAssignmentId(created?.id ?? null)
-            setPlannerAssignmentTitle(title)
-            const planRes = await api.post(`/assignments/${created.id}/plan`, undefined, { timeout: 60000 })
-            const subtasks = (planRes?.data as Array<{ id: number; title: string; estimated_minutes: number; order_index?: number }>) || []
-            const moodRes = await api.get("/mood/", { params: { limit: 1 }, timeout: 10000 })
-            type MoodItem = { additional_metrics?: { burnout_indicator?: string } }
-            const latestMood: MoodItem | null = (Array.isArray(moodRes?.data) && moodRes.data.length > 0) ? (moodRes.data[0] as MoodItem) : null
-            const burnout = latestMood?.additional_metrics?.burnout_indicator
-            const burnoutHeavy = burnout === "noticeable" || burnout === "a_lot"
-
-            const scheduleRes = await api.get("/schedule/", { timeout: 20000 })
-            const existing = (scheduleRes?.data as Array<{ start_at: string; end_at: string }>) || []
-            const deadline = plannerDeadline ? new Date(plannerDeadline) : new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000)
-            const baseCapacityMin = Math.max(30, Math.min(8 * 60, Math.round(hoursPerDay * 60)))
-            const dayCapacityMin = burnoutHeavy ? Math.round(baseCapacityMin * 0.7) : baseCapacityMin
-
-            const byDay = new Map<string, Array<{ start: Date; end: Date }>>()
-            for (const b of existing) {
-                const s = new Date(b.start_at)
-                const e = new Date(b.end_at)
-                const key = s.toDateString()
-                const arr = byDay.get(key) || []
-                arr.push({ start: s, end: e })
-                byDay.set(key, arr)
-            }
-
-            const startHour = 9
-            const breakMin = burnoutHeavy ? 25 : 15
-            const now = new Date()
-            let cursor = new Date(now.getFullYear(), now.getMonth(), now.getDate(), startHour, 0, 0)
-
-            const withinDeadline = (d: Date) => d <= deadline
-            const isWeekend = (d: Date) => {
-                const day = d.getDay()
-                return day === 0 || day === 6
-            }
-
-            let dayUsedMin = 0
-            const toLocalInput = (d: Date) => {
-                const pad = (n: number) => String(n).padStart(2, "0")
-                return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-            }
-            const advanceToNextDay = () => {
-                const next = new Date(cursor)
-                next.setDate(cursor.getDate() + 1)
-                next.setHours(startHour, 0, 0, 0)
-                cursor = next
-                dayUsedMin = 0
-            }
-
-            const scheduled: Array<{ id: number; title: string; estimated_minutes: number; order_index?: number; start_at?: string; end_at?: string }> = []
-            for (const s of subtasks) {
-                let remaining = Math.max(15, Math.round(s.estimated_minutes || 30))
-                while (remaining > 0) {
-                    if (!withinDeadline(cursor)) break
-                    if (!allowWeekends && isWeekend(cursor)) {
-                        advanceToNextDay()
-                        continue
-                    }
-                    const availableToday = dayCapacityMin - dayUsedMin
-                    if (availableToday <= 0) {
-                        advanceToNextDay()
-                        continue
-                    }
-                    const baseMin = burnoutHeavy ? 20 : 30
-                    const cap = burnoutHeavy ? Math.min(60, remaining) : remaining
-                    const slotMin = Math.min(cap, Math.max(baseMin, availableToday))
-
-                    const dayKey = cursor.toDateString()
-                    const occupied = (byDay.get(dayKey) || []).slice().sort((a, b) => a.start.getTime() - b.start.getTime())
-                    let start = new Date(cursor)
-                    for (const block of occupied) {
-                        if (start < block.end && (start >= block.start)) {
-                            start = new Date(block.end.getTime() + breakMin * 60 * 1000)
-                        }
-                    }
-                    const end = new Date(start.getTime() + slotMin * 60 * 1000)
-                    occupied.push({ start, end })
-                    byDay.set(dayKey, occupied)
-
-                    scheduled.push({ id: s.id, title: s.title, estimated_minutes: s.estimated_minutes, order_index: s.order_index, start_at: toLocalInput(start), end_at: toLocalInput(end) })
-
-                    dayUsedMin += slotMin
-                    remaining -= slotMin
-                    cursor = new Date(end.getTime() + breakMin * 60 * 1000)
-                }
-            }
-
-            setPlannedSubtasks(scheduled)
-
-            const totalMin = Math.max(0, scheduled.reduce((acc, s) => acc + Math.max(15, Math.round(s.estimated_minutes || 30)), 0))
-            const countDays = (start: Date, finish: Date, includeWeekends: boolean) => {
-                const d = new Date(start.getFullYear(), start.getMonth(), start.getDate())
-                const last = new Date(finish.getFullYear(), finish.getMonth(), finish.getDate())
-                let count = 0
-                while (d <= last) {
-                    const wd = d.getDay()
-                    if (includeWeekends || (wd !== 0 && wd !== 6)) count++
-                    d.setDate(d.getDate() + 1)
-                }
-                return Math.max(1, count)
-            }
-            const daysAvail = countDays(now, deadline, allowWeekends)
-            const capacityMin = Math.max(30, Math.round(hoursPerDay * 60)) * daysAvail
-            if (capacityMin < totalMin) {
-                const neededPerDayMin = Math.ceil(totalMin / daysAvail)
-                const suggested = Math.max(0.5, Math.round(neededPerDayMin / 60 * 2) / 2)
-                setSuggestedHoursPerDay(suggested)
-                setWorkSummary({ totalHours: Math.round(totalMin / 60 * 10) / 10, daysAvailable: daysAvail })
-                setSuggestionOpen(true)
-            }
-        } catch (e) {
-            console.error("Failed to generate planner", e)
-            alert("Failed to generate planner. Please check inputs and try again.")
-        } finally {
-            setIsPlanning(false)
-        }
-    }
-
-    const extractUsingAI = async () => {
-        try {
-            setIsExtracting(true)
-            if (!importText || importText.trim().length < 10) {
-                alert("Please upload or paste assignment details first")
-                return
-            }
-            const res = await api.post("/ai/extract-assignment-text", { text: importText })
-            const data = res?.data as { clean_text?: string; suggested_title?: string }
-            if (data?.clean_text) setImportText(data.clean_text)
-            if (data?.suggested_title && !plannerTitle) setPlannerTitle(data.suggested_title)
-        } catch (e) {
-            console.error("AI extraction failed", e)
-            alert("AI extraction failed. Please try again or edit manually.")
-        } finally {
-            setIsExtracting(false)
-        }
-    }
-
-    const addPlanToCalendar = async () => {
-        try {
-            if (!plannedSubtasks.length) return
-            const moodRes = await api.get("/mood/", { params: { limit: 1 }, timeout: 10000 })
-            type MoodItem = { additional_metrics?: { burnout_indicator?: string } }
-            const latestMood: MoodItem | null = (Array.isArray(moodRes?.data) && moodRes.data.length > 0) ? (moodRes.data[0] as MoodItem) : null
-            const burnout = latestMood?.additional_metrics?.burnout_indicator
-            const burnoutHeavy = burnout === "noticeable" || burnout === "a_lot"
-
-            const scheduleRes = await api.get("/schedule/")
-            const existing = (scheduleRes?.data as Array<{ start_at: string; end_at: string }>) || []
-            const deadline = plannerDeadline ? new Date(plannerDeadline) : new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000)
-            const baseCapacityMin = Math.max(30, Math.min(8 * 60, Math.round(hoursPerDay * 60)))
-            const dayCapacityMin = burnoutHeavy ? Math.round(baseCapacityMin * 0.7) : baseCapacityMin
-
-            const byDay = new Map<string, Array<{ start: Date; end: Date }>>()
-            for (const b of existing) {
-                const s = new Date(b.start_at)
-                const e = new Date(b.end_at)
-                const key = s.toDateString()
-                const arr = byDay.get(key) || []
-                arr.push({ start: s, end: e })
-                byDay.set(key, arr)
-            }
-
-            const startHour = 9
-            const breakMin = burnoutHeavy ? 25 : 15
-            const now = new Date()
-            let cursor = new Date(now.getFullYear(), now.getMonth(), now.getDate(), startHour, 0, 0)
-
-            const withinDeadline = (d: Date) => d <= deadline
-            const isWeekend = (d: Date) => {
-                const day = d.getDay()
-                return day === 0 || day === 6
-            }
-
-            let dayUsedMin = 0
-            const createdBlocks: Array<{ id?: number }> = []
-
-            const advanceToNextDay = () => {
-                const next = new Date(cursor)
-                next.setDate(cursor.getDate() + 1)
-                next.setHours(startHour, 0, 0, 0)
-                cursor = next
-                dayUsedMin = 0
-            }
-
-            for (const s of plannedSubtasks) {
-                if (s.start_at && s.end_at) {
-                    const start = new Date(s.start_at)
-                    const end = new Date(s.end_at)
-                    const payload = {
-                        start_at: start.toISOString(),
-                        end_at: end.toISOString(),
-                        type: "STUDY",
-                        status: "PLANNED",
-                        title: toTitleCase(plannerAssignmentTitle ? `${plannerAssignmentTitle} - ${s.title}` : s.title),
-                        assignment_id: plannerAssignmentId ?? undefined,
-                        subtask_id: s.id,
-                        source: "AI_SUGGESTED",
-                    }
-                    try {
-                        const created = await api.post("/schedule/", payload)
-                        createdBlocks.push(created?.data || {})
-                    } catch {}
-                    continue
-                }
-                let remaining = Math.max(15, Math.round(s.estimated_minutes || 30))
-                while (remaining > 0) {
-                    if (!withinDeadline(cursor)) break
-                    if (!allowWeekends && isWeekend(cursor)) {
-                        advanceToNextDay()
-                        continue
-                    }
-                    // Ensure we don't exceed daily capacity
-                    const availableToday = dayCapacityMin - dayUsedMin
-                    if (availableToday <= 0) {
-                        advanceToNextDay()
-                        continue
-                    }
-                    const baseMin = burnoutHeavy ? 20 : 30
-                    const cap = burnoutHeavy ? Math.min(60, remaining) : remaining
-                    const slotMin = Math.min(cap, Math.max(baseMin, availableToday))
-
-                    const dayKey = cursor.toDateString()
-                    const occupied = (byDay.get(dayKey) || []).slice().sort((a, b) => a.start.getTime() - b.start.getTime())
-                    // Find next non-overlapping start time
-                    let start = new Date(cursor)
-                    for (const block of occupied) {
-                        if (start < block.end && (start >= block.start)) {
-                            start = new Date(block.end.getTime() + breakMin * 60 * 1000)
-                        }
-                    }
-                    const end = new Date(start.getTime() + slotMin * 60 * 1000)
-                    // Record occupancy for rest of planning loop
-                    occupied.push({ start, end })
-                    byDay.set(dayKey, occupied)
-
-                    const payload = {
-                        start_at: end < deadline ? start.toISOString() : deadline.toISOString(),
-                        end_at: end < deadline ? end.toISOString() : deadline.toISOString(),
-                        type: "STUDY",
-                        status: "PLANNED",
-                        title: toTitleCase(plannerAssignmentTitle ? `${plannerAssignmentTitle} - ${s.title}` : s.title),
-                        assignment_id: plannerAssignmentId ?? undefined,
-                        subtask_id: s.id,
-                        source: "AI_SUGGESTED",
-                    }
-                    try {
-                        const created = await api.post("/schedule/", payload)
-                        createdBlocks.push(created?.data || {})
-                    } catch {}
-
-                    dayUsedMin += slotMin
-                    remaining -= slotMin
-                    // Move cursor forward for next block
-                    cursor = new Date(end.getTime() + breakMin * 60 * 1000)
-                }
-            }
-
-            window.dispatchEvent(new CustomEvent('assignmentUpdated'))
-            alert(`Added ${createdBlocks.length} study blocks to your calendar`)
-        } catch (e) {
-            console.error("Failed to add plan to calendar", e)
-            alert("Failed to add plan to calendar. Please try again.")
-        }
-    }
+    
 
     return (
         <div className="flex-1 space-y-4 p-8 pt-6">
             <div className="flex items-center justify-between space-y-2">
                 <h2 className="text-3xl font-bold tracking-tight">Assignments</h2>
                 <div className="flex items-center space-x-2">
-                    <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                    <Dialog open={isAddDialogOpen} onOpenChange={handleAddDialogOpenChange}>
                         <DialogTrigger asChild>
                             <Button>
                                 <Plus className="mr-2 h-4 w-4" /> Add Assignment
                             </Button>
                         </DialogTrigger>
-                        <DialogContent className="sm:max-w-[425px]">
+                        <DialogContent className="sm:max-w-[1000px] max-h-[100vh] overflow-y-auto">
                             <DialogHeader>
                                 <DialogTitle>Add Assignment</DialogTitle>
                                 <DialogDescription>
@@ -627,48 +769,41 @@ export default function AssignmentsPage() {
                                 </DialogDescription>
                             </DialogHeader>
                             <div className="grid gap-4 py-4">
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="title" className="text-right">
-                                Title
-                            </Label>
-                            <Input
-                                id="title"
-                                placeholder="e.g., Final Paper"
-                                className="col-span-3"
-                                value={newAssignment.title}
-                                onChange={(e) => setNewAssignment({ ...newAssignment, title: e.target.value })}
-                            />
-                        </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label className="text-right">Course</Label>
-                            <Input
-                                placeholder="Type course"
-                                className="col-span-3"
-                                value={newAssignmentCourseText}
-                                onChange={(e) => { setNewAssignmentCourseText(e.target.value); setNewAssignment({ ...newAssignment, course_id: "" }) }}
-                            />
-                        </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="dueDate" className="text-right">
-                                        Due Date
-                                    </Label>
+                                <div className="space-y-2">
+                                    <Label htmlFor="title" className="block">Title</Label>
                                     <Input
-                                        id="dueDate"
-                                        type="datetime-local"
-                                        className="col-span-3"
-                                        value={newAssignment.due_at}
-                                        onChange={(e) => setNewAssignment({ ...newAssignment, due_at: e.target.value })}
+                                        id="title"
+                                        placeholder="e.g., Final Paper"
+                                        className="w-full"
+                                        value={newAssignment.title}
+                                        onChange={(e) => setNewAssignment({ ...newAssignment, title: e.target.value })}
                                     />
                                 </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="importance" className="text-right">
-                                        Importance
-                                    </Label>
+                                <div className="space-y-2">
+                                    <Label className="block">Course</Label>
+                                    <Input
+                                        placeholder="Type course"
+                                        className="w-full"
+                                        value={newAssignmentCourseText}
+                                        onChange={(e) => { setNewAssignmentCourseText(e.target.value); setNewAssignment({ ...newAssignment, course_id: "" }) }}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="dueDate" className="block">Due Date</Label>
+                                    <DateTimePicker
+                                        id="dueDate"
+                                        className="w-full"
+                                        value={newAssignment.due_at}
+                                        onChange={(v) => setNewAssignment({ ...newAssignment, due_at: v })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="importance" className="block">Importance</Label>
                                     <Select
                                         value={newAssignment.importance_level}
                                         onValueChange={(value) => setNewAssignment({ ...newAssignment, importance_level: value })}
                                     >
-                                        <SelectTrigger className="col-span-3">
+                                        <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Select importance" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -679,257 +814,291 @@ export default function AssignmentsPage() {
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="confidence" className="text-right">
-                                        Confidence (1-5)
-                                    </Label>
-                        <Input
-                            id="confidence"
-                            type="number"
-                            min="1"
-                            max="5"
-                            className="col-span-3"
-                            value={Number.isFinite(newAssignment.user_confidence) ? newAssignment.user_confidence : 1}
-                            onChange={(e) => {
-                                const parsed = parseInt(e.target.value, 10)
-                                const next = Number.isFinite(parsed) ? Math.max(1, Math.min(5, parsed)) : 1
-                                setNewAssignment({ ...newAssignment, user_confidence: next })
-                            }}
-                        />
+                                <div className="space-y-2">
+                                    <Label htmlFor="confidence" className="block">Confidence (1-5)</Label>
+                                    <Input
+                                        id="confidence"
+                                        type="number"
+                                        min="1"
+                                        max="5"
+                                        className="w-full"
+                                        value={Number.isFinite(newAssignment.user_confidence) ? newAssignment.user_confidence : 1}
+                                        onChange={(e) => {
+                                            const parsed = parseInt(e.target.value, 10)
+                                            const next = Number.isFinite(parsed) ? Math.max(1, Math.min(5, parsed)) : 1
+                                            setNewAssignment({ ...newAssignment, user_confidence: next })
+                                        }}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="block">Hours/Day</Label>
+                                    <div className="space-y-1">
+                                        <Input
+                                            type="number"
+                                            min="0.5"
+                                            step="0.5"
+                                            className="w-full"
+                                            value={hoursPerDayInput}
+                                            onChange={(e) => {
+                                                const raw = e.target.value
+                                                setHoursPerDayInput(raw)
+                                                const v = parseFloat(raw)
+                                                if (Number.isFinite(v) && v > 18) {
+                                                    setHoursPerDayError("please enter the right amount of hours per day you can work")
+                                                } else {
+                                                    setHoursPerDayError(null)
+                                                }
+                                            }}
+                                            onBlur={(e) => {
+                                                const v = parseFloat(e.target.value)
+                                                const next = Number.isFinite(v) ? Math.max(0.5, Math.min(18, v)) : 2
+                                                if (Number.isFinite(v) && v > 18) {
+                                                    setHoursPerDayError("please enter the right amount of hours per day you can work")
+                                                } else {
+                                                    setHoursPerDayError(null)
+                                                }
+                                                setHoursPerDay(next)
+                                                setHoursPerDayInput(String(next))
+                                            }}
+                                        />
+                                        {hoursPerDayError && (
+                                            <div className="text-red-500 text-xs">{hoursPerDayError}</div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="block">Allow Weekends</Label>
+                                    <div className="w-full"><Switch checked={allowWeekends} onCheckedChange={setAllowWeekends} /></div>
                                 </div>
                             </div>
+                        <div className="py-2">
+                            <div className="w-full space-y-3">
+                                <div className="w-full">
+                                    <Label className="mb-2 block">Import Document</Label>
+                                    <Input type="file" accept=".txt,.md,.docx,.pdf" onChange={(e) => handleImportFile(e.target.files?.[0] || null)} />
+                                </div>
+                                <div className="w-full">
+                                    <Label className="mb-2 block">Summarized Assignment</Label>
+                                    <textarea className="w-full h-64 rounded-md border p-3" placeholder="If you don't upload a document, briefly explain the assignment here before summarizing." value={importText} onChange={(e) => setImportText(e.target.value)} />
+                                    <div className="text-xs text-muted-foreground mt-1">Summarized content appears here after pressing &quot;Summarize Assignment&quot;</div>
+                                </div>
+                                <div className="flex justify-end gap-2 pt-1">
+                                    {(rawImportText.trim().length > 0 || (importText.trim().length > 0 && rawImportText.trim().length === 0)) && (
+                                        <Button variant="secondary" onClick={summarizeAssignment} disabled={isPlanning}>{isPlanning ? "Working..." : "Summarize Assignment"}</Button>
+                                    )}
+                                    <Button onClick={handleGeneratePlan} disabled={isPlanning}>{isPlanning ? "Generating..." : "Generate Plan"}</Button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {planningStep !== 'none' && (
+                            <div className="space-y-4 mt-2">
+                                {planningStep === 'choices' && (
+                                    <div className="flex justify-center gap-3">
+                                        <Button onClick={handleChooseDivideSubtasks} disabled={isPlanning}>Divide into subtasks</Button>
+                                        <Button onClick={handleChooseOneGo} disabled={isPlanning}>One go</Button>
+                                    </div>
+                                )}
+
+                                {planningStep === 'one' && (
+                                    <div className="space-y-3">
+                                        <div className="space-y-2">
+                                            <div className="grid grid-cols-12 gap-2 items-center text-xs font-medium text-muted-foreground">
+                                                <div className="col-span-4">Assignment</div>
+                                                <div className="col-span-3">Estimated Duration (min)</div>
+                                                <div className="col-span-5">Suggested time and date</div>
+                                            </div>
+                                            <div className="grid grid-cols-12 gap-2 items-center">
+                                                <div className="col-span-4">
+                                                    <Input value={plannerAssignmentTitle || newAssignment.title || 'Assignment'} disabled />
+                                                </div>
+                                                <div className="col-span-3">
+                                                    <Input type="number" value={oneGoSuggestion?.duration_min || 60} disabled />
+                                                </div>
+                                                <div className="col-span-5">
+                                                    {!isOneGoEditing ? (
+                                                        <button className="text-left text-sm w-full" onClick={() => setIsOneGoEditing(true)}>
+                                                            {oneGoSuggestion ? `${new Date(oneGoSuggestion.start_at).toLocaleString()} → ${new Date(oneGoSuggestion.end_at).toLocaleString()}` : 'No suggestion'}
+                                                        </button>
+                                                    ) : (
+                                                        <div className="space-y-2">
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                <DateTimePicker value={oneGoSuggestion?.start_at || ''} onChange={(v) => setOneGoSuggestion(prev => prev ? { ...prev, start_at: v } : prev)} />
+                                                                <DateTimePicker value={oneGoSuggestion?.end_at || ''} onChange={(v) => setOneGoSuggestion(prev => prev ? { ...prev, end_at: v } : prev)} />
+                                                            </div>
+                                                            <div className="flex justify-end">
+                                                                <Button size="sm" variant="outline" onClick={() => setIsOneGoEditing(false)}>Done</Button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {planningStep === 'subtasks' && plannedSubtasks.length > 0 && (
+                                    <div className="space-y-3">
+                                        <div className="space-y-2">
+                                            <div className="grid grid-cols-12 gap-2 items-center text-xs font-medium text-muted-foreground">
+                                                <div className="col-span-4">Subtask</div>
+                                                <div className="col-span-2">Duration (min)</div>
+                                                <div className="col-span-6">Time</div>
+                                            </div>
+                                            {plannedSubtasks.map((s, idx) => (
+                                                <div key={`${s.id}-${idx}`} className="grid grid-cols-12 gap-2 items-center">
+                                                    <div className="col-span-4">
+                                                        <Input value={s.title} disabled />
+                                                    </div>
+                                                    <div className="col-span-2">
+                                                        <Input type="number" min="15" step="5" value={s.estimated_minutes} disabled />
+                                                    </div>
+                                                    <div className="col-span-6">
+                                                        {!editingSubtaskIds.includes(s.id) ? (
+                                                            <button className="text-left text-sm w-full" onClick={() => {
+                                                                setEditingSubtaskIds(prev => prev.includes(s.id) ? prev : [...prev, s.id])
+                                                            }}>
+                                                                {s.start_at && s.end_at ? `${new Date(s.start_at).toLocaleString()} → ${new Date(s.end_at).toLocaleString()}` : 'No suggestion'}
+                                                            </button>
+                                                        ) : (
+                                                            <div className="space-y-2">
+                                                                <div className="grid grid-cols-2 gap-2">
+                                                                    <DateTimePicker value={s.start_at || ''} onChange={(v) => setPlannedSubtasks(prev => prev.map((p, i) => i === idx ? { ...p, start_at: v } : p))} />
+                                                                    <DateTimePicker value={s.end_at || ''} onChange={(v) => setPlannedSubtasks(prev => prev.map((p, i) => i === idx ? { ...p, end_at: v } : p))} />
+                                                                </div>
+                                                                <div className="flex justify-end">
+                                                                    <Button size="sm" variant="outline" onClick={() => setEditingSubtaskIds(prev => prev.filter(id => id !== s.id))}>Done</Button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                             <DialogFooter>
-                                <Button type="submit" onClick={handleCreateAssignment}>Save Assignment</Button>
+                                <Button variant="outline" onClick={handleCreateAssignment} disabled={isPlanning}>Save Assignment</Button>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
                 </div>
             </div>
 
-            <Card>
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle>All Tasks</CardTitle>
-                            <CardDescription>
-                                Manage your coursework, deadlines, and progress.
-                            </CardDescription>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                            <div className="relative">
-                                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                                <Input placeholder="Search tasks..." className="pl-8 w-[300px]" value={allTasksQuery} onChange={(e) => setAllTasksQuery(e.target.value)} />
+            <div className="grid md:grid-cols-2 gap-4">
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle>All Tasks</CardTitle>
+                                <CardDescription>Tasks scheduled in your calendar.</CardDescription>
                             </div>
-                            <Button variant="outline" size="icon">
-                                <Filter className="h-4 w-4" />
-                            </Button>
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    {(() => {
-                        const filteredTasks = plannedSubtasks.filter(t => {
-                            if (!allTasksQuery.trim()) return true
-                            const q = allTasksQuery.toLowerCase()
-                            return (t.title?.toLowerCase().includes(q))
-                        })
-                        const sorted = filteredTasks.slice().sort((a, b) => {
-                            const as = a.start_at ? new Date(a.start_at).getTime() : 0
-                            const bs = b.start_at ? new Date(b.start_at).getTime() : 0
-                            return as - bs
-                        })
-
-                        return (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" className="w-full">All Tasks ({sorted.length})</Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent side="bottom" align="start" sideOffset={6} avoidCollisions={false} className="w-[860px] bg-background border shadow-xl">
-                                    <ScrollArea className="h-[540px] w-full p-2">
-                                        {sorted.length === 0 ? (
-                                            <div className="p-4 text-sm text-muted-foreground">No tasks yet. Generate a planner to see tasks.</div>
-                                        ) : (
-                                            sorted.map((t, idx) => (
-                                                <DropdownMenuItem key={`${t.id}-${idx}`} className="flex flex-col items-start space-y-2">
-                                                    <div className="flex w-full items-center justify-between">
-                                                        <span className="font-medium text-sm">{toTitleCase(plannerAssignmentTitle)} • {toTitleCase(t.title)}</span>
-                                                        <Badge variant="secondary">Scheduled</Badge>
-                                                    </div>
-                                                    <div className="text-xs text-muted-foreground w-full flex justify-between">
-                                                        <span>Start: {t.start_at ? new Date(t.start_at).toLocaleString() : 'Not scheduled'}</span>
-                                                        <span>Due: {t.end_at ? new Date(t.end_at).toLocaleString() : 'Not set'}</span>
-                                                    </div>
-                                                </DropdownMenuItem>
-                                            ))
-                                        )}
-                                    </ScrollArea>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        )
-                    })()}
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle>All Assignments</CardTitle>
-                            <CardDescription>Review full assignment details and your planner inputs.</CardDescription>
-                        </div>
-                    <div className="flex items-center space-x-2">
-                        <div className="relative">
-                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input placeholder="Search assignments..." className="pl-8 w-[280px]" value={allAssignmentsQuery} onChange={(e) => setAllAssignmentsQuery(e.target.value)} />
-                        </div>
-                        <div className="relative">
-                            <Input placeholder="Filter by course" className="w-[240px]" value={assignmentsCourseFilter} onChange={(e) => setAssignmentsCourseFilter(e.target.value)} />
-                        </div>
-                        <div className="flex rounded-md overflow-hidden border">
-                            <Button variant={assignmentsSortBy === "due" ? "default" : "ghost"} onClick={() => setAssignmentsSortBy("due")}>Due</Button>
-                            <Button variant={assignmentsSortBy === "importance" ? "default" : "ghost"} onClick={() => setAssignmentsSortBy("importance")}>Importance</Button>
-                        </div>
-                        <Button variant="outline" onClick={() => downloadAssignments("json", getAllAssignmentsList())}>
-                            <Download className="mr-2 h-4 w-4" /> JSON
-                        </Button>
-                        <Button variant="outline" onClick={() => downloadAssignments("csv", getAllAssignmentsList())}>
-                            <Download className="mr-2 h-4 w-4" /> CSV
-                        </Button>
-                    </div>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    {(() => {
-                        const filtered = getAllAssignmentsList()
-                        const sorted = filtered
-                        return (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" className="w-full">All Assignments ({sorted.length})</Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent side="bottom" align="start" sideOffset={6} className="w-[860px] bg-background border shadow-xl">
-                                    <ScrollArea className="h-[540px] w-full p-2">
-                                        {sorted.length === 0 ? (
-                                            <div className="p-4 text-sm text-muted-foreground">No assignments found.</div>
-                                        ) : (
-                                            sorted.map((assignment, idx) => (
-                                                <DropdownMenuItem key={`${assignment.id}-${idx}`} className="flex flex-col items-start space-y-2">
-                                                    <div className="flex w-full items-center justify-between">
-                                                        <span className="font-medium text-base">{toTitleCase(assignment.title)}</span>
-                                                        <Badge variant={assignment.importance_level === 'high' || assignment.importance_level === 'critical' ? 'destructive' : assignment.importance_level === 'medium' ? 'default' : 'secondary'}>
-                                                            {assignment.importance_level}
-                                                        </Badge>
-                                                    </div>
-                                                    <div className="text-xs text-muted-foreground w-full flex justify-between">
-                                                        <span>Course: {courseLabel(assignment.course_id)}</span>
-                                                        <span>Due: {new Date(assignment.due_at).toLocaleString()}</span>
-                                                    </div>
-                                                    <div className="text-xs">Confidence: {assignment.user_confidence ?? 'N/A'}</div>
-                                                    {plannerAssignmentId === assignment.id && (
-                                                        <div className="w-full text-xs text-muted-foreground">Planner inputs: Hours/Day {hoursPerDay} • Weekends {allowWeekends ? 'Yes' : 'No'} • Deadline {plannerDeadline ? new Date(plannerDeadline).toLocaleString() : 'N/A'}</div>
-                                                    )}
-                                                </DropdownMenuItem>
-                                            ))
-                                        )}
-                                    </ScrollArea>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        )
-                    })()}
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>AI Planner</CardTitle>
-                    <CardDescription>Import assignment details and generate an editable study plan.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-3">
-                            <Label>Import Document</Label>
-                            <Input type="file" accept=".txt,.md,.docx,.pdf" onChange={(e) => handleImportFile(e.target.files?.[0] || null)} />
-                            <Input placeholder="Assignment Title" value={plannerTitle} onChange={(e) => setPlannerTitle(e.target.value)} />
-                            <Label>Extracted/Pasted Details</Label>
-                            <textarea className="w-full h-48 rounded-md border p-2" placeholder="Paste assignment details if needed" value={importText} onChange={(e) => setImportText(e.target.value)} />
-                            <div className="text-xs text-muted-foreground">For best results, paste key instructions and rubric.</div>
-                        </div>
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">Course</Label>
-                                <Input
-                                    placeholder="Type course (optional)"
-                                    className="col-span-3"
-                                    value={plannerCourseText}
-                                    onChange={(e) => setPlannerCourseText(e.target.value)}
-                                />
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">Deadline</Label>
-                                <Input type="datetime-local" className="col-span-3" value={plannerDeadline} onChange={(e) => setPlannerDeadline(e.target.value)} />
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">Hours/Day</Label>
-                                <Input type="number" min="0.5" step="0.5" className="col-span-3" value={hoursPerDay} onChange={(e) => setHoursPerDay(Math.max(0.5, Math.min(12, parseFloat(e.target.value || '2'))))} />
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">Allow Weekends</Label>
-                                <div className="col-span-3"><Switch checked={allowWeekends} onCheckedChange={setAllowWeekends} /></div>
-                            </div>
-                            <div className="flex gap-2">
-                                <Button variant="secondary" onClick={extractUsingAI} disabled={isExtracting}>{isExtracting ? "Extracting..." : "Extract using AI"}</Button>
-                                <Button onClick={generatePlanner} disabled={isPlanning}>{isPlanning ? "Generating..." : "Generate Planner"}</Button>
-                                {plannedSubtasks.length > 0 && (
-                                    <Button variant="outline" onClick={addPlanToCalendar}>Add to Calendar</Button>
-                                )}
-                            </div>
-                            {plannedSubtasks.length > 0 && (
-                                <div className="mt-4 space-y-2">
-                                    {plannedSubtasks.map((s, idx) => (
-                                        <div key={`${s.id}-${idx}`} className="grid grid-cols-12 gap-2 items-center">
-                                            <div className="col-span-6">
-                                                <Input value={s.title} onChange={(e) => setPlannedSubtasks(prev => prev.map((p, i) => i === idx ? { ...p, title: e.target.value } : p))} />
-                                            </div>
-                                            <div className="col-span-2">
-                                                <Input type="number" min="15" step="5" value={s.estimated_minutes} onChange={(e) => setPlannedSubtasks(prev => prev.map((p, i) => i === idx ? { ...p, estimated_minutes: Math.max(15, parseInt(e.target.value || '30', 10)) } : p))} />
-                                            </div>
-                                            <div className="col-span-2">
-                                                <Input type="datetime-local" placeholder="Start" value={s.start_at || ''} onChange={(e) => setPlannedSubtasks(prev => prev.map((p, i) => i === idx ? { ...p, start_at: e.target.value } : p))} />
-                                            </div>
-                                            <div className="col-span-2">
-                                                <Input type="datetime-local" placeholder="End" value={s.end_at || ''} onChange={(e) => setPlannedSubtasks(prev => prev.map((p, i) => i === idx ? { ...p, end_at: e.target.value } : p))} />
-                                            </div>
-                                        </div>
-                                    ))}
+                            <div className="flex items-center space-x-2">
+                                <div className="relative">
+                                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <Input placeholder="Search tasks..." className="pl-8 w-[300px]" value={allTasksQuery} onChange={(e) => setAllTasksQuery(e.target.value)} />
                                 </div>
-                            )}
+                            </div>
                         </div>
-                    </div>
-                </CardContent>
-            </Card>
+                    </CardHeader>
+                    <CardContent>
+                        {(() => {
+                            const filtered = scheduleBlocks.filter(b => {
+                                const q = allTasksQuery.trim().toLowerCase()
+                                if (!q) return true
+                                return String(b.title || '').toLowerCase().includes(q)
+                            }).sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+                            return (
+                                <ScrollArea className="h-[540px] w-full p-2">
+                                    {filtered.length === 0 ? (
+                                        <div className="p-4 text-sm text-muted-foreground">No tasks scheduled.</div>
+                                    ) : (
+                                        filtered.map((t) => (
+                                            <div key={`task-${t.id}`} className="flex flex-col items-start space-y-1 p-2 border rounded-md mb-2">
+                                                <div className="flex w-full items-center justify-between">
+                                                    <span className="font-medium text-sm">{toTitleCase(t.title)}</span>
+                                                    {t.assignment_id ? (
+                                                        <Badge variant="secondary">{t.type || 'STUDY'}</Badge>
+                                                    ) : null}
+                                                </div>
+                                                <div className="text-xs text-muted-foreground w-full flex justify-between">
+                                                    <span>Start: {new Date(t.start_at).toLocaleString()}</span>
+                                                    <span>End: {new Date(t.end_at).toLocaleString()}</span>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </ScrollArea>
+                            )
+                        })()}
+                    </CardContent>
+                </Card>
 
-            {suggestionOpen && (
-                <Dialog open={suggestionOpen} onOpenChange={setSuggestionOpen}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Increase Hours Per Day?</DialogTitle>
-                            <DialogDescription>
-                                {workSummary ? `Estimated work ~${workSummary.totalHours}h over ${workSummary.daysAvailable} day(s).` : ''}
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-3">
-                            <div className="text-sm">Your current daily limit may be too low to finish before the deadline.</div>
-                            {suggestedHoursPerDay !== null && (
-                                <div className="text-sm">Suggested daily hours: <span className="font-semibold">{suggestedHoursPerDay}h/day</span></div>
-                            )}
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle>All Assignments</CardTitle>
+                                <CardDescription>Review and manage assignments.</CardDescription>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <div className="relative">
+                                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <Input placeholder="Search assignments..." className="pl-8 w-[280px]" value={allAssignmentsQuery} onChange={(e) => setAllAssignmentsQuery(e.target.value)} />
+                                </div>
+                            </div>
                         </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setSuggestionOpen(false)}>Keep Current</Button>
-                            <Button onClick={() => { if (suggestedHoursPerDay) setHoursPerDay(suggestedHoursPerDay); setSuggestionOpen(false) }}>Apply Suggestion</Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-            )}
+                        <div className="mt-4 flex items-center gap-2 flex-wrap">
+                            <div className="relative">
+                                <Input placeholder="Filter by course" className="w-[240px]" value={assignmentsCourseFilter} onChange={(e) => setAssignmentsCourseFilter(e.target.value)} />
+                            </div>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline">
+                                        <Download className="mr-2 h-4 w-4" /> Download
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                    <DropdownMenuItem onClick={() => downloadAssignments("json", getAllAssignmentsList())}>JSON</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => downloadAssignments("csv", getAllAssignmentsList())}>CSV</DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        {(() => {
+                            const filtered = getAllAssignmentsList()
+                            return (
+                                <ScrollArea className="h-[540px] w-full p-2">
+                                    {filtered.length === 0 ? (
+                                        <div className="p-4 text-sm text-muted-foreground">No assignments found.</div>
+                                    ) : (
+                                        filtered.map((assignment) => (
+                                            <div key={`assign-${assignment.id}`} className="flex flex-col items-start space-y-1 p-2 border rounded-md mb-2">
+                                                <div className="flex w-full items-center justify-between">
+                                                    <span className="font-medium text-base">{toTitleCase(assignment.title)}</span>
+                                                    <Badge variant={assignment.importance_level === 'high' || assignment.importance_level === 'critical' ? 'destructive' : assignment.importance_level === 'medium' ? 'default' : 'secondary'}>
+                                                        {assignment.importance_level}
+                                                    </Badge>
+                                                </div>
+                                                <div className="text-xs text-muted-foreground w-full flex justify-between">
+                                                    <span>Course: {courseLabel(assignment.course_id)}</span>
+                                                    <span>Due: {new Date(assignment.due_at).toLocaleString()}</span>
+                                                </div>
+                                                <div className="text-xs">Confidence: {assignment.user_confidence ?? 'N/A'}</div>
+                                            </div>
+                                        ))
+                                    )}
+                                </ScrollArea>
+                            )
+                        })()}
+                    </CardContent>
+                </Card>
+            </div>
+
+            
         </div>
     )
 }

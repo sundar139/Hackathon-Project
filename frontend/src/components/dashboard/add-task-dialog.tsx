@@ -25,6 +25,7 @@ import { useToast } from "@/components/ui/use-toast"
 import api from "@/lib/api"
 import { useRouter } from "next/navigation"
 import { useAuthStore } from "@/store/auth"
+import { DateTimePicker } from "@/components/ui/date-time-picker"
 
 export function AddTaskDialog({ onTaskAdded, children }: { onTaskAdded?: () => void, children?: React.ReactNode }) {
     const [open, setOpen] = useState(false)
@@ -78,14 +79,27 @@ export function AddTaskDialog({ onTaskAdded, children }: { onTaskAdded?: () => v
                 const pad = (n: number) => String(n).padStart(2, "0")
                 return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${sign}${offH}:${offM}`
             })()
+            const startIso = dueIso
+            const endIso = (() => {
+                if (!startIso) return undefined
+                const s = new Date(startIso)
+                const end = new Date(s.getTime() + Math.max(1, newTask.estimated_minutes) * 60 * 1000)
+                const tz = end.getTimezoneOffset()
+                const sign = tz <= 0 ? "+" : "-"
+                const abs = Math.abs(tz)
+                const offH = String(Math.floor(abs / 60)).padStart(2, "0")
+                const offM = String(abs % 60).padStart(2, "0")
+                const pad = (n: number) => String(n).padStart(2, "0")
+                return `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}T${pad(end.getHours())}:${pad(end.getMinutes())}:${pad(end.getSeconds())}${sign}${offH}:${offM}`
+            })()
             const payload = {
                 title: newTask.title,
-                due_at: dueIso,
-                importance_level: newTask.priority,
-                status: "NOT_STARTED",
-                estimated_minutes: newTask.estimated_minutes,
+                start_at: startIso,
+                end_at: endIso,
+                type: "STUDY",
+                status: "PLANNED",
             }
-            await api.post("/assignments/", payload)
+            await api.post("/schedule/", payload)
 
             toast({
                 title: "Task Added!",
@@ -99,6 +113,7 @@ export function AddTaskDialog({ onTaskAdded, children }: { onTaskAdded?: () => v
                 priority: "medium",
                 estimated_minutes: 30,
             })
+            try { window.dispatchEvent(new CustomEvent('assignmentUpdated')) } catch {}
             if (onTaskAdded) onTaskAdded()
         } catch (error) {
             console.error("Failed to create task", error)
@@ -161,14 +176,14 @@ export function AddTaskDialog({ onTaskAdded, children }: { onTaskAdded?: () => v
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="due" className="text-right">
-                            Due Date
+                            Date
                         </Label>
-                        <Input
+                        <DateTimePicker
                             id="due"
-                            type="datetime-local"
                             value={newTask.due_date}
-                            onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value })}
+                            onChange={(v) => setNewTask({ ...newTask, due_date: v })}
                             className="col-span-3"
+                            placeholder="Select date & time"
                         />
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">

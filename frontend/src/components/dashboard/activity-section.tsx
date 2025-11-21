@@ -12,8 +12,8 @@ type TileId = "study" | "walk" | "meditate" | "relax"
 type IconType = ComponentType<{ className?: string }>
 
 const activityTiles: { id: TileId; label: string; color: string; icon: IconType; durations: number[] }[] = [
-  { id: "study", label: "Focus Study", color: "bg-blue-600", icon: Timer, durations: [30, 60, 90, 120, 180] },
-  { id: "walk", label: "Go for a Walk", color: "bg-purple-600", icon: Footprints, durations: [30, 60, 90, 120] },
+  { id: "study", label: "Focus Study", color: "bg-rose-600", icon: Timer, durations: [30, 60, 90, 120, 180] },
+  { id: "walk", label: "Go for a Walk", color: "bg-orange-600", icon: Footprints, durations: [30, 60, 90, 120] },
   { id: "meditate", label: "Meditate", color: "bg-green-600", icon: Wind, durations: [30, 60] },
   { id: "relax", label: "Relax", color: "bg-rose-600", icon: Droplet, durations: [30, 60, 90, 120, 180] },
 ]

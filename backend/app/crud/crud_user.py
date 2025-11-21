@@ -29,6 +29,19 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
             return None
         return user
 
+    def update_user(self, db: Session, *, db_obj: User, obj_in: UserUpdate) -> User:
+        data = obj_in.dict(exclude_unset=True)
+        if "password" in data and data["password"]:
+            hashed_password = get_password_hash(data["password"])
+            data.pop("password", None)
+            data["hashed_password"] = hashed_password
+        for field, value in data.items():
+            setattr(db_obj, field, value)
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
+
 # Legacy function exports for backward compatibility
 def get_user(db: Session, user_id: int):
     return db.query(User).filter(User.id == user_id).first()

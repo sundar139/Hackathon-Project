@@ -23,6 +23,17 @@ class CRUDPeerGroup(CRUDBase[PeerGroup, PeerGroupCreate, PeerGroupUpdate]):
     def is_member(self, db: Session, *, group_id: int, user_id: int) -> bool:
         return db.query(GroupMember).filter(GroupMember.group_id == group_id, GroupMember.user_id == user_id).first() is not None
 
+    def leave_group(self, db: Session, *, group_id: int, user_id: int) -> Optional[GroupMember]:
+        obj = db.query(GroupMember).filter(GroupMember.group_id == group_id, GroupMember.user_id == user_id).first()
+        if not obj:
+            return None
+        db.delete(obj)
+        db.commit()
+        return obj
+
+    def get_members(self, db: Session, *, group_id: int, skip: int = 0, limit: int = 100) -> List[GroupMember]:
+        return db.query(GroupMember).filter(GroupMember.group_id == group_id).offset(skip).limit(limit).all()
+
     def create_message(self, db: Session, *, group_id: int, user_id: int, content: str) -> GroupMessage:
         db_obj = GroupMessage(group_id=group_id, user_id=user_id, content=content)
         db.add(db_obj)

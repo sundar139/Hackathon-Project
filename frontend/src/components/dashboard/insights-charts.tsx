@@ -80,16 +80,16 @@ export function InsightsCharts() {
             {/* Bottom: Insight Cards List */}
             <div className="grid grid-cols-2 gap-3 min-h-0">
                 {/* Mood Insight */}
-                <Card className="border-none shadow-sm bg-indigo-50/50 dark:bg-indigo-950/20 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors cursor-pointer group">
+                <Card className="border-none shadow-sm bg-rose-50/50 dark:bg-rose-900/20 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors cursor-pointer group">
                     <CardContent className="p-4 flex flex-col h-full justify-between">
                         <div className="flex items-start justify-between">
-                            <div className="p-2 rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-300">
+                            <div className="p-2 rounded-lg bg-rose-100 text-rose-600 dark:bg-rose-900 dark:text-rose-300">
                                 <BrainCircuit className="h-4 w-4" />
                             </div>
                             <ArrowRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
                         <div className="mt-2">
-                            <h4 className="font-semibold text-sm text-indigo-900 dark:text-indigo-100">Mood Correlation</h4>
+                            <h4 className="font-semibold text-sm text-rose-900 dark:text-rose-100">Mood Correlation</h4>
                             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                                 {moodInsight}
                             </p>

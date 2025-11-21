@@ -38,6 +38,23 @@ export function AssistantPanel({ compact = false }: AssistantPanelProps) {
         }
     }, [messages])
 
+    useEffect(() => {
+        const loadSaved = async () => {
+            try {
+                const sessionsRes = await api.get("/chat/sessions")
+                const sessions = Array.isArray(sessionsRes.data) ? sessionsRes.data as Array<{ id: number; started_at?: string; ended_at?: string | null }> : []
+                const active = sessions.find(s => !s.ended_at) || sessions.sort((a, b) => new Date(String(b.started_at || 0)).getTime() - new Date(String(a.started_at || 0)).getTime())[0]
+                if (!active) return
+                const msgsRes = await api.get(`/chat/sessions/${active.id}/messages`)
+                const msgs = Array.isArray(msgsRes.data) ? msgsRes.data as Array<{ role: "user" | "assistant"; content: string }> : []
+                if (msgs.length > 0) {
+                    setMessages(msgs.map(m => ({ role: m.role, content: m.content, timestamp: new Date() })))
+                }
+            } catch {}
+        }
+        loadSaved()
+    }, [])
+
     const handleSend = async () => {
         if (!input.trim() || isLoading) return
 
@@ -73,28 +90,24 @@ export function AssistantPanel({ compact = false }: AssistantPanelProps) {
     }
 
     const suggestedPrompts = [
-        "Help me plan my day",
-        "Break down my assignment",
         "I'm feeling overwhelmed",
-        "Suggest a break"
+        "I need to vent",
+        "Help me process my feelings",
+        "Guide me through a grounding exercise"
     ]
 
     return (
         <Card className={cn("flex flex-col shadow-sm hover:shadow-md transition-shadow", compact ? "h-full" : "h-[600px]")}>
             <CardHeader className="pb-2 border-b">
                 <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 text-white">
+                    <div className="p-1.5 rounded-lg bg-gradient-to-br from-rose-500 to-orange-500 text-white">
                         <Bot className="h-4 w-4" />
                     </div>
                     <div className="flex-1">
-                        <CardTitle className="text-base font-bold">AI Assistant</CardTitle>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                            <span className="text-[10px] text-muted-foreground">Online</span>
-                        </div>
+                        <CardTitle className="text-base font-bold">AssignWell Companion</CardTitle>
                     </div>
                     {!compact && (
-                        <Badge variant="secondary" className="bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 border-0 text-xs">
+                        <Badge variant="secondary" className="bg-gradient-to-r from-rose-100 to-orange-100 text-rose-700 border-0 text-xs">
                             <Sparkles className="h-3 w-3 mr-1" />
                             AI
                         </Badge>
@@ -104,7 +117,7 @@ export function AssistantPanel({ compact = false }: AssistantPanelProps) {
 
             <CardContent className="flex-1 flex flex-col p-0 min-h-0">
                 {/* Messages */}
-                <ScrollArea className={cn("flex-1", compact ? "p-2" : "p-4")} ref={scrollRef}>
+                <ScrollArea className={cn("flex-1 overflow-y-auto", compact ? "p-2" : "p-4")} ref={scrollRef}>
                     <div className={cn("space-y-2", compact && "space-y-1.5")}>
                         {messages.map((message, index) => (
                             <div
@@ -119,8 +132,8 @@ export function AssistantPanel({ compact = false }: AssistantPanelProps) {
                                     "rounded-full flex items-center justify-center flex-shrink-0",
                                     compact ? "w-6 h-6" : "w-8 h-8",
                                     message.role === "assistant"
-                                        ? "bg-gradient-to-br from-purple-500 to-pink-500 text-white"
-                                        : "bg-gradient-to-br from-blue-500 to-cyan-500 text-white"
+                                        ? "bg-gradient-to-br from-rose-500 to-orange-500 text-white"
+                                        : "bg-gradient-to-br from-rose-400 to-orange-400 text-white"
                                 )}>
                                     {message.role === "assistant" ? (
                                         <Bot className={compact ? "h-3 w-3" : "h-4 w-4"} />
@@ -139,7 +152,7 @@ export function AssistantPanel({ compact = false }: AssistantPanelProps) {
                                         compact ? "px-2 py-1.5" : "px-4 py-2",
                                         message.role === "assistant"
                                             ? "bg-muted"
-                                            : "bg-gradient-to-br from-primary-500 to-primary-600 text-white"
+                                            : "bg-rose-500 text-white"
                                     )}>
                                         <p className={cn("leading-relaxed", compact ? "text-xs" : "text-sm")}>{message.content}</p>
                                     </div>
@@ -155,7 +168,7 @@ export function AssistantPanel({ compact = false }: AssistantPanelProps) {
                         {isLoading && (
                             <div className="flex gap-2 animate-fade-in">
                                 <div className={cn(
-                                    "rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-white flex items-center justify-center",
+                                    "rounded-full bg-gradient-to-br from-rose-500 to-orange-500 text-white flex items-center justify-center",
                                     compact ? "w-6 h-6" : "w-8 h-8"
                                 )}>
                                     <Bot className={compact ? "h-3 w-3" : "h-4 w-4"} />
@@ -179,7 +192,7 @@ export function AssistantPanel({ compact = false }: AssistantPanelProps) {
                                     variant="outline"
                                     size="sm"
                                     onClick={() => setInput(prompt)}
-                                    className="text-xs hover:bg-primary-50"
+                                    className="text-xs hover:bg-rose-50"
                                 >
                                     {prompt}
                                 </Button>
@@ -195,14 +208,14 @@ export function AssistantPanel({ compact = false }: AssistantPanelProps) {
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyPress={(e) => e.key === "Enter" && handleSend()}
-                            placeholder="Type your message... Try: Help me plan my day"
+                            placeholder="Type a message..."
                             disabled={isLoading}
                             className={cn("flex-1", compact && "h-8 text-xs")}
                         />
                         <Button
                             onClick={handleSend}
                             disabled={!input.trim() || isLoading}
-                            className={cn("bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700", compact && "h-8 w-8 p-0")}
+                            className={cn("bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600", compact && "h-8 w-8 p-0")}
                             size={compact ? "icon" : "default"}
                         >
                             <Send className={compact ? "h-3 w-3" : "h-4 w-4"} />

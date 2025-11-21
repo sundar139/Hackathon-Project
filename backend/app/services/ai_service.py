@@ -241,23 +241,45 @@ Only return the JSON object, no other text."""
                 upcoming_str = ", ".join([f"{x.get('title')} ({fmt_due(str(x.get('due_at') or ''))})" for x in upcoming[:5]]) or "none"
                 mood_str = "; ".join([f"valence={str(m.get('mood_valence'))}, energy={m.get('energy_level')}, stress={m.get('stress_level')}" for m in mood_history[:5]]) or "no recent check-ins"
 
-                system_prompt = """You are AssignWell AI, a supportive academic and wellbeing assistant for students. You combine:
-- Empathetic, therapist-style listening
-- Practical academic planning advice
-- Stress management techniques
-- Encouragement and validation
+                system_prompt = """**Role:**
+You are a warm, compassionate, non-judgmental therapeutic companion. You are not a licensed therapist, but you follow evidence-based supportive communication skills (CBT-inspired reflection, grounding, active listening, gentle questioning).
+Your job is to create a safe space for the user to talk, vent, reflect, and process whatever they’re going through.
 
-Keep responses concise (2-3 sentences). Be warm, supportive, and actionable. If a student mentions stress or overwhelm, acknowledge their feelings and offer a specific coping strategy."""
+**Core Behaviors:**
+1. Let the user speak freely. Encourage them to share more.
+2. Validate their emotions without exaggeration.
+3. Do NOT rush to solutions; focus on understanding before advising.
+4. Comfort the user appropriately with calm reassurance.
+5. Encourage self-reflection with gentle, open-ended questions.
+6. Stay emotionally neutral but supportive; avoid tough-love or toxic positivity.
+7. Avoid medical or clinical claims; do not diagnose or give medication advice.
+8. Keep the conversation flowing; end with invitations to continue sharing.
+
+**Tone Guidelines**
+- Gentle, soft, present. No jargon. No judgment. Emotional warmth.
+
+**If user expresses strong distress**
+- Validate feelings; encourage reaching out to trusted people or professionals.
+- Avoid empty platitudes; do not attempt crisis intervention beyond referral.
+
+**Example Style**
+User: "I feel like everything is falling apart."
+AI: "It sounds really heavy to feel that way. When everything stacks up at once, it can become exhausting. What’s been happening lately that’s led you to feel like things are falling apart?"
+
+**Goal**
+Create a compassionate conversational space where the user feels safe to speak, vent, and reflect. Provide comfort and steady emotional presence throughout the conversation.
+
+Keep responses concise (2–3 sentences). Be warm, supportive, and invitational."""
 
                 response = await self.client.chat.completions.create(
                     model=self.model_fast,
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "system", "content": f"Context for {user_name}: upcoming={upcoming_str}; overdue_count={overdue_count}; next={next_assignment.get('title') or 'n/a'}; mood={mood_str}"},
+                        {"role": "system", "content": f"Context for {user_name}: mood={mood_str}"},
                         {"role": "user", "content": message}
                     ],
                     temperature=0.6,
-                    max_tokens=80
+                    max_tokens=60
                 )
                 
                 return response.choices[0].message.content.strip()
@@ -278,25 +300,19 @@ Keep responses concise (2-3 sentences). Be warm, supportive, and actionable. If 
 
     def quick_tip(self, context: Dict[str, Any]) -> str:
         user_name = context.get("user_name") or "friend"
-        overdue = int(context.get("overdue_count") or 0)
-        next_assignment = context.get("next_assignment") or {}
-        next_title = str(next_assignment.get("title") or "your next task")
         mood_hist = context.get("mood_history") or []
         last = mood_hist[0] if mood_hist else {}
-        valence = str(last.get("mood_valence") or "neutral")
-        energy = last.get("energy_level")
         stress = last.get("stress_level")
+        energy = last.get("energy_level")
         parts = []
         parts.append(f"I’m here with you, {user_name}.")
-        if overdue > 0:
-            parts.append(f"You have {overdue} overdue item{'s' if overdue != 1 else ''}; let’s ease back in.")
-        parts.append(f"Focus: try one small step on {next_title}.")
         if isinstance(stress, int) and stress >= 7:
-            parts.append("Take a 3-minute breathing break first.")
+            parts.append("It sounds like stress might be high. Try three slow breaths.")
         elif isinstance(energy, int) and energy <= 2:
-            parts.append("Do a 45-minute light-focus block.")
+            parts.append("Energy seems low. A brief pause and gentle grounding can help.")
         else:
-            parts.append("Write 3 tiny steps, then start a 25-minute block.")
+            parts.append("If you’d like, tell me what feels most present right now.")
+        parts.append("I’m listening if you want to share more.")
         return " " .join(parts)
 
     async def replan_week(self, user_id: int, assignments: List[Dict[str, Any]], mood_logs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

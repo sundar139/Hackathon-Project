@@ -14,6 +14,7 @@ from app.api.api_v1.endpoints import (
     courses,
     activity,
     goals,
+    accountability,
 )
 
 api_router = APIRouter()
@@ -29,3 +30,4 @@ api_router.include_router(peer_groups.router, prefix="/peer-groups", tags=["peer
 api_router.include_router(courses.router, prefix="/courses", tags=["courses"])
 api_router.include_router(activity.router, prefix="/activity", tags=["activity"])
 api_router.include_router(goals.router, prefix="/goals", tags=["goals"])
+api_router.include_router(accountability.router, prefix="/accountability", tags=["accountability"])

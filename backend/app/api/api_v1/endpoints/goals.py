@@ -1,5 +1,6 @@
 from typing import Any, List, Tuple
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
@@ -127,7 +128,8 @@ def _compute_candidate_slots(
     target_date: datetime.date,
     duration_minutes: int,
     existing_blocks: List[ScheduleBlock],
-    preferred_time_window: str = None
+    preferred_time_window: str = None,
+    tz: ZoneInfo = ZoneInfo("UTC")
 ) -> List[Tuple[datetime, datetime]]:
     """
     Rule-based logic to find candidate time slots.
@@ -164,12 +166,12 @@ def _compute_candidate_slots(
     
     # Try to find available slots in each time window
     for window_start_hour, window_end_hour in time_windows:
-        window_start = datetime.combine(target_date, datetime.min.time()).replace(
-            hour=window_start_hour, minute=0, second=0, microsecond=0, tzinfo=timezone.utc
-        )
-        window_end = datetime.combine(target_date, datetime.min.time()).replace(
-            hour=window_end_hour, minute=0, second=0, microsecond=0, tzinfo=timezone.utc
-        )
+        # Build window in user's timezone, then convert to UTC for comparisons/storage
+        local_day = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=tz)
+        window_start_local = local_day.replace(hour=window_start_hour, minute=0, second=0, microsecond=0)
+        window_end_local = local_day.replace(hour=window_end_hour, minute=0, second=0, microsecond=0)
+        window_start = window_start_local.astimezone(timezone.utc)
+        window_end = window_end_local.astimezone(timezone.utc)
         
         # Try slots starting every 30 minutes within this window
         current_time = window_start
@@ -219,9 +221,17 @@ async def suggest_times(
     # Use provided duration or goal's default duration
     duration_minutes = request.duration_minutes if request.duration_minutes else goal.duration_minutes
     
-    # Get all schedule blocks for that date (timezone-aware)
-    start_of_day = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=timezone.utc)
-    end_of_day = start_of_day + timedelta(days=1)
+    # Determine user's timezone
+    try:
+        user_tz = ZoneInfo(current_user.timezone or "UTC")
+    except Exception:
+        user_tz = ZoneInfo("UTC")
+
+    # Get all schedule blocks for that date using user's local day boundaries converted to UTC
+    start_of_day_local = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=user_tz)
+    end_of_day_local = start_of_day_local + timedelta(days=1)
+    start_of_day = start_of_day_local.astimezone(timezone.utc)
+    end_of_day = end_of_day_local.astimezone(timezone.utc)
     
     # Query schedule blocks for the day
     existing_blocks = db.query(ScheduleBlock).filter(
@@ -238,7 +248,8 @@ async def suggest_times(
         target_date=target_date,
         duration_minutes=duration_minutes,
         existing_blocks=existing_blocks,
-        preferred_time_window=goal.preferred_time_window
+        preferred_time_window=goal.preferred_time_window,
+        tz=user_tz
     )
     
     # Step 2: If we have candidate slots, use AI to rank and generate reasons

@@ -13,10 +13,13 @@ interface Group {
   id: number
   name: string
   description: string
+  member_count?: number
+  is_member?: boolean
 }
 
 export default function PeerSupportPage() {
   const [groups, setGroups] = useState<Group[]>([])
+  const [recommended, setRecommended] = useState<Group[]>([])
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
@@ -30,7 +33,16 @@ export default function PeerSupportPage() {
         setGroups([])
       }
     }
+    const fetchRecommended = async () => {
+      try {
+        const res = await api.get("/peer-groups/recommendations")
+        setRecommended(res.data)
+      } catch {
+        setRecommended([])
+      }
+    }
     fetchGroups()
+    fetchRecommended()
   }, [])
 
   const handleCreate = async () => {
@@ -69,8 +81,50 @@ export default function PeerSupportPage() {
             <ul className="space-y-3">
               {groups.map(g => (
                 <li key={g.id} className="border rounded-md p-3">
-                  <div className="font-medium">{g.name}</div>
-                  <div className="text-sm text-muted-foreground">{g.description}</div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{g.name}</div>
+                      <div className="text-sm text-muted-foreground">{g.description}</div>
+                      <div className="text-xs text-muted-foreground">Members: {g.member_count || 0}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button variant="secondary" onClick={() => window.location.href = `/peer-support/${g.id}`}>View</Button>
+                      {g.is_member ? (
+                        <span className="text-xs text-green-600">Joined</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Not joined</span>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Recommended For You</CardTitle>
+          <CardDescription>Based on your courses and activity</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {recommended.length === 0 ? (
+            <p className="text-muted-foreground">No recommendations right now</p>
+          ) : (
+            <ul className="space-y-3">
+              {recommended.map(g => (
+                <li key={g.id} className="border rounded-md p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{g.name}</div>
+                      <div className="text-sm text-muted-foreground">{g.description}</div>
+                      <div className="text-xs text-muted-foreground">Members: {g.member_count || 0}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button variant="secondary" onClick={() => window.location.href = `/peer-support/${g.id}`}>View</Button>
+                    </div>
+                  </div>
                 </li>
               ))}
             </ul>
